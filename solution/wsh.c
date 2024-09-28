@@ -7,7 +7,9 @@
 #define MAX_INPUT 1024
 
 TokenArr tokenizeString(char* my_str, int input_size) {
-	int token_count;
+	TokenArr my_tokens;
+	my_tokens.token_count = 0;
+	const char DELIM = ' ';
 
 	// Allocated char count + 1 as we need the /0
 	char* my_str_cpy = malloc(1 + (input_size * sizeof(char)));
@@ -19,6 +21,16 @@ TokenArr tokenizeString(char* my_str, int input_size) {
 	if(strcpy(my_str_cpy, my_str) == NULL) {
 		exit(-1);
 	}
+
+	while(strtok(my_str_cpy, &DELIM) != NULL) {
+		my_tokens.token_count++;
+	}
+
+	
+	for(int i =0; i < my_tokens.token_count;i++) {
+		
+	}
+	
 	
 }
 
