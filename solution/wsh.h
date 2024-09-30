@@ -4,4 +4,4 @@ typedef struct {
 } TokenArr;
 
 void wsh_exit();
-TokenArr tokenizeString(char* my_str);
+TokenArr tokenizeString(char* my_str, int input_size);

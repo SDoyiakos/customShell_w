@@ -6,13 +6,20 @@
 
 #define MAX_INPUT 1024
 
+void debugTokens(TokenArr my_tokens) {
+	printf("The tokens in the arr are:\n");
+	for(int i = 0;i < my_tokens.token_count;i++) {
+		printf("%s\n", my_tokens.tokens[i]);
+	}
+}
+
 TokenArr tokenizeString(char* my_str, int input_size) {
 	TokenArr my_tokens;
 	my_tokens.token_count = 0;
 	const char DELIM = ' ';
 
 	// Allocated char count + 1 as we need the /0
-	char* my_str_cpy = malloc(1 + (input_size * sizeof(char)));
+	char* my_str_cpy = malloc(sizeof(char) + (input_size * sizeof(char)));
 	if(my_str_cpy == NULL) {
 		exit(-1);
 	}
@@ -22,16 +29,32 @@ TokenArr tokenizeString(char* my_str, int input_size) {
 		exit(-1);
 	}
 
-	while(strtok(my_str_cpy, &DELIM) != NULL) {
+	printf("Passed first copy\n");
+	
+	// Get amount of tokens
+	strtok(my_str_cpy, &DELIM);
+	while(strtok(NULL, &DELIM) != NULL) {
 		my_tokens.token_count++;
 	}
 
 	
-	for(int i =0; i < my_tokens.token_count;i++) {
-		
+
+	// Allocate token arr
+	my_tokens.tokens = malloc(my_tokens.token_count * sizeof(char*));
+	if(my_tokens.tokens == NULL) {
+		printf("Error retrieving command\nExiting\n");
+		exit(-1);
 	}
-	
-	
+
+	// Copy tokens into token arr
+	char* token_buf;
+	for(int i = 0; i < my_tokens.token_count;i++) {
+		token_buf = strtok(my_str, &DELIM); // Check for errors later
+		my_tokens.tokens[i] = malloc(strlen(token_buf) + 1);
+		strcpy(my_tokens.tokens[i], token_buf);
+	}
+
+	return my_tokens;	
 }
 
 void parseInputs(char* input_buffer, int* input_size) {
@@ -53,13 +76,14 @@ void parseInputs(char* input_buffer, int* input_size) {
 
 
 int interactiveMode() {
+	TokenArr my_tokens;
 	char* user_input = NULL;
 	int* input_size = malloc(sizeof(int));
 	while(1) {
 		printf("wsh> ");
 		parseInputs(user_input, input_size);
-
-		// Tokenize input
+		my_tokens = tokenizeString(user_input, *input_size); // Tokenize input
+		//debugTokens(my_tokens);
 		
 	}	
 }
