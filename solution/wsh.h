@@ -1,3 +1,7 @@
+
+#define MAX_INPUT 1024
+
+
 typedef struct {
 	int token_count;
 	char** tokens;

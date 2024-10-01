@@ -4,7 +4,6 @@
 #include <errno.h>
 #include "wsh.h"
 
-#define MAX_INPUT 1024
 
 void debugTokens(TokenArr my_tokens) {
 	printf("The tokens in the arr are:\n");
@@ -17,22 +16,23 @@ TokenArr tokenizeString(char* my_str, int input_size) {
 	TokenArr my_tokens;
 	my_tokens.token_count = 0;
 	const char DELIM = ' ';
-
+	
 	// Allocated char count + 1 as we need the /0
 	char* my_str_cpy = malloc(sizeof(char) + (input_size * sizeof(char)));
 	if(my_str_cpy == NULL) {
 		exit(-1);
 	}
 
+	
 	// Copy string
 	if(strcpy(my_str_cpy, my_str) == NULL) {
 		exit(-1);
 	}
-
-	printf("Passed first copy\n");
 	
 	// Get amount of tokens
-	strtok(my_str_cpy, &DELIM);
+	if(strtok(my_str_cpy, &DELIM) != NULL) {
+		my_tokens.token_count++;
+	}
 	while(strtok(NULL, &DELIM) != NULL) {
 		my_tokens.token_count++;
 	}
@@ -47,22 +47,28 @@ TokenArr tokenizeString(char* my_str, int input_size) {
 	}
 
 	// Copy tokens into token arr
-	char* token_buf;
-	for(int i = 0; i < my_tokens.token_count;i++) {
-		token_buf = strtok(my_str, &DELIM); // Check for errors later
-		my_tokens.tokens[i] = malloc(strlen(token_buf) + 1);
-		strcpy(my_tokens.tokens[i], token_buf);
+	
+	if(my_tokens.token_count > 0) {
+		char* token_buf;
+		token_buf = strtok(my_str, &DELIM);
+		my_tokens.tokens[0] = malloc(strlen(token_buf) + sizeof(char));
+		strcpy(my_tokens.tokens[0], token_buf);
+	
+		for(int i = 1; i < my_tokens.token_count;i++) {
+			token_buf = strtok(NULL, &DELIM); // Check for errors later
+			my_tokens.tokens[i] = malloc(strlen(token_buf) + sizeof(char));
+			strcpy(my_tokens.tokens[i], token_buf);
+		}
 	}
-
 	return my_tokens;	
 }
 
 void parseInputs(char* input_buffer, int* input_size) {
 	
-	size_t line_length = MAX_INPUT;
+	size_t buffer_len = MAX_INPUT; // The size of the buffer
 	
 	// Getting next user input
-	*input_size = getline(&input_buffer, &line_length, stdin);
+	*input_size = getline(&input_buffer, &buffer_len, stdin);
 
 	// Checking whether input has errors or not
 	if(*input_size == -1) {
@@ -77,13 +83,16 @@ void parseInputs(char* input_buffer, int* input_size) {
 
 int interactiveMode() {
 	TokenArr my_tokens;
-	char* user_input = NULL;
+	char* user_input = malloc(MAX_INPUT * sizeof(char));
 	int* input_size = malloc(sizeof(int));
+
+	// Run loop until exit
 	while(1) {
 		printf("wsh> ");
 		parseInputs(user_input, input_size);
+		printf("MY STR: %s\n", user_input);
 		my_tokens = tokenizeString(user_input, *input_size); // Tokenize input
-		//debugTokens(my_tokens);
+		debugTokens(my_tokens);
 		
 	}	
 }
