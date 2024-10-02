@@ -25,7 +25,6 @@ const char* COMMAND_ARR[] =
 	"vars"
 };
 
-
 // BUILT IN FUNCTIONS
 void wshExit();
 void wshLs();
@@ -33,6 +32,7 @@ void wshCd(char* new_dir);
 void wshExport(char* var_name, char* var_val);
 void wshVars();
 
+// Internal shell functions
 int checkBuiltIn(char* my_command);
 void runCommand(TokenArr my_tokens);
 TokenArr tokenizeString(char* my_str, int input_size);

@@ -218,6 +218,11 @@ void runCommand(TokenArr my_tokens) {
 	char* my_command = my_tokens.tokens[0];
 
 	switch(checkBuiltIn(my_command)) {
+
+		case -1: // Non built in command
+			printf("[%s] is not a valid command\n", my_command);
+			break;
+			
 		case 0: // exit
 
 			// Checking for zero flags or parameters
