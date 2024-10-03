@@ -152,8 +152,12 @@ void wshLs() {
 	// Read until null
 	my_dirent = readdir(dp);
 	while(my_dirent != NULL) {
-		if((my_dirent->d_name)[0] != '.') {
-			printf("%s\n", my_dirent->d_name);
+		if((my_dirent->d_name)[0] != '.') { // Ignore hidden files
+			printf("%s", my_dirent->d_name); // Print file name
+			if(my_dirent->d_type == DT_DIR) { // Append / on a dir
+				printf("/");
+			}
+			printf("\n");
 		}	
 		my_dirent = readdir(dp);
 	}
@@ -274,6 +278,11 @@ void runCommand(TokenArr my_tokens) {
 				}
 			}
 			break;
+
+		case 4:
+			char* var_name;
+			char* var_val;
+		
 		case 5: // vars
 			wshVars();
 			break;	
