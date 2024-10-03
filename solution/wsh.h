@@ -2,11 +2,14 @@
 #define SHELL_MAX_INPUT 1024
 #define MAX_DIR_SIZE 1024
 
-typedef struct {
-	char* var_name;
-	char* var_val;
-} ShellVar;
-
+// Struct acts as a node in a linked list
+struct ShellVar {
+	char var_name[SHELL_MAX_INPUT];
+	char var_val[SHELL_MAX_INPUT];
+	struct ShellVar* next_var;
+};
+void insertShellVar(char* var_name, char* var_val);
+char* getShellVar(char* var_name);
 
 // Struct for tokenized user inputs
 typedef struct {
@@ -30,9 +33,14 @@ void wshExit();
 void wshLs();
 void wshCd(char* new_dir);
 void wshExport(char* var_name, char* var_val);
+void wshLocal(char* var_name, char* var_val);
 void wshVars();
 
+
 // Internal shell functions
-int checkBuiltIn(char* my_command);
+char* getBuiltIn(char* my_command);
+
+
 void runCommand(TokenArr my_tokens);
 TokenArr tokenizeString(char* my_str, int input_size);
+

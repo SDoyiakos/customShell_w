@@ -7,7 +7,9 @@
 #include <unistd.h>
 #include "wsh.h"
 
+// Global vars
 extern char** environ;
+struct ShellVar* shellLinkedListHead = NULL;
 
 /**
 *	Test function merely for me to see if tokens are being grabbed properly
@@ -193,14 +195,15 @@ void wshExport(char* var_name, char* var_val) {
 	
 }
 
+/**
+* Prints all vars in the local vars
+**/
 void wshVars() {
-	char* env_val;
-	int env_index = 0;
-	env_val = environ[env_index];
-	while(env_val != NULL) {
-		printf("%s\n", env_val);
-		env_index++;
-		env_val = environ[env_index];
+	struct ShellVar* var_ptr;
+	var_ptr = shellLinkedListHead;
+	while(var_ptr != NULL) {
+		printf("%s=%s\n",var_ptr->var_name, var_ptr->var_val);
+		var_ptr = var_ptr->next_var;
 	}
 }
 
@@ -216,6 +219,81 @@ int checkBuiltIn(char* my_command) {
 		}
 	}
 	return -1;
+}
+
+/**
+* Gets the index of a shell variable
+**/
+int findShellVar(char* var_name) {
+	int index = 0;
+	struct ShellVar* var_ptr = shellLinkedListHead;
+
+	// Linear search for var index
+	while(var_ptr != NULL) {
+
+		// Var found
+		if(strcmp(var_ptr->var_name,var_name) == 0){
+			return index;
+		}
+		var_ptr = var_ptr->next_var;
+		index++;
+	}
+	return -1; // Var not found
+}
+
+/**
+* Built in wsh command. Adds the variable to the
+* local vars array. Updates value instead if already found in local vars array
+**/
+void wshLocal(char* var_name, char* var_val) {
+	struct ShellVar* shell_var_ptr;
+	int var_loc = findShellVar(var_name);
+	
+	// If the linked list is empty/has no entries
+	if(shellLinkedListHead == NULL) {
+
+		// Allocating head
+		shellLinkedListHead = malloc(sizeof(struct ShellVar));
+		if(shellLinkedListHead == NULL) {
+			printf("Error adding shell var\n");
+			exit(-1);
+		}
+		shellLinkedListHead->next_var = NULL;
+		shell_var_ptr = shellLinkedListHead; // New ptr is to head
+	}
+
+	// If var is in the Linked List
+	else if(var_loc != -1) {
+		shell_var_ptr = shellLinkedListHead;
+		for(int i = 0;i < var_loc;i++) {
+			shell_var_ptr = shell_var_ptr->next_var;
+		}
+	}
+	// If there is a head to the Linked List
+	else {
+	
+		// Increment pointer until next shell var ptr is null or var name found
+		shell_var_ptr = shellLinkedListHead;
+		while(shell_var_ptr->next_var != NULL) {
+			shell_var_ptr = shell_var_ptr->next_var;
+		}
+
+		// Allocate next ShellVar in linked list
+		shell_var_ptr->next_var = malloc(sizeof(struct ShellVar));
+		if(shell_var_ptr == NULL) {
+			printf("Error adding shell var\n");
+			exit(-1);
+		}
+
+		shell_var_ptr = shell_var_ptr->next_var; // Point to new var
+		shell_var_ptr->next_var = NULL; // Set new vars next var to null
+	}
+	
+	// Copy vals into new var
+	if(strcpy(shell_var_ptr->var_name, var_name) == NULL || strcpy(shell_var_ptr->var_val, var_val) == NULL) {
+		printf("Error adding shell var\n");
+		exit(-1);
+	}	
 }
 
 void runCommand(TokenArr my_tokens) {
@@ -280,8 +358,26 @@ void runCommand(TokenArr my_tokens) {
 			break;
 
 		case 4:
-			char* var_name;
-			char* var_val;
+			printf("Running Local\n");
+			if(my_tokens.token_count !=2) {
+				printf("GENERIC ERROR\n");
+			}
+			else {
+			
+				char* var_name;
+				char* var_val;
+				var_name = strtok(my_tokens.tokens[1], "=");
+				var_val = strtok(NULL, "=");
+				
+				// If var_name or var_val is null
+				if(var_name == NULL || var_val == NULL) {
+						printf("Error, export failed to assign shell var\n");
+				}
+				else {
+					wshLocal(var_name, var_val);
+				}
+			}
+			break;
 		
 		case 5: // vars
 			wshVars();
