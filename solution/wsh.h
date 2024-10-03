@@ -11,6 +11,14 @@ struct ShellVar {
 void insertShellVar(char* var_name, char* var_val);
 char* getShellVar(char* var_name);
 
+struct HistEntry {
+	char command[SHELL_MAX_INPUT];
+	struct HistEntry* next_entry;
+	struct HistEntry* prev_entry;
+};
+void addHistEntry(char* command);
+void removeHistEntry();
+
 // Struct for tokenized user inputs
 typedef struct {
 	int token_count;
@@ -25,7 +33,8 @@ const char* COMMAND_ARR[] =
 	"cd",
 	"export",
 	"local",
-	"vars"
+	"vars",
+	"history"
 };
 
 // BUILT IN FUNCTIONS
@@ -35,6 +44,8 @@ void wshCd(char* new_dir);
 void wshExport(char* var_name, char* var_val);
 void wshLocal(char* var_name, char* var_val);
 void wshVars();
+void wshGetHist();
+void wshSetHist(int new_size);
 
 
 // Internal shell functions

@@ -11,6 +11,13 @@
 extern char** environ;
 struct ShellVar* shellLinkedListHead = NULL;
 
+// History globals
+struct HistEntry* histHead;
+struct HistEntry* histTail;
+int histLimit = 5;
+int histSize = 0;
+
+
 /**
 *	Test function merely for me to see if tokens are being grabbed properly
 **/
@@ -196,7 +203,7 @@ void wshExport(char* var_name, char* var_val) {
 }
 
 /**
-* Prints all vars in the local vars
+* Prints all shell vars
 **/
 void wshVars() {
 	struct ShellVar* var_ptr;
@@ -296,6 +303,52 @@ void wshLocal(char* var_name, char* var_val) {
 	}	
 }
 
+void addHistEntry(char* command) { 
+	char error_message[] = "Error adding command to history";
+
+	// Adding first entry
+	if(histSize == 0) {
+		histHead = malloc(sizeof(struct HistEntry));
+		histTail = histHead;
+		if(histHead == NULL || histTail == NULL) {
+			printf("%s\n", error_message);
+			exit(-1);
+		}
+		if(strcpy(histHead->command, command) == NULL) {
+			printf("%s\n", error_message);
+			exit(-1);
+		}
+		histHead->next_entry = NULL;
+		histHead->prev_entry = NULL;
+		histSize++;
+	}
+
+	// >= 1 Entry
+	else {
+		struct HistEntry* command_ptr;
+		command_ptr = malloc(sizeof(struct HistEntry));
+		if(command_ptr == NULL) {
+			printf("%s\n", error_message);
+			exit(-1);
+		}
+		if(strcpy(command_ptr->command, command) == NULL) {
+			printf("%s\n", error_message);
+			exit(-1);
+		}
+		command_ptr->next_entry = histHead;
+		command_ptr->prev_entry = NULL;
+		histSize++;
+	}
+
+	// Remove any entries over limit 
+	if(histSize > histLimit) {
+		int hist_diff = histSize - histLimit;
+		for(int i = 0;i < hist_diff;i++) {
+			removeHistEntry();
+		}
+	}
+}
+
 void runCommand(TokenArr my_tokens) {
 	char* my_command = my_tokens.tokens[0];
 
@@ -360,7 +413,7 @@ void runCommand(TokenArr my_tokens) {
 		case 4:
 			printf("Running Local\n");
 			if(my_tokens.token_count !=2) {
-				printf("GENERIC ERROR\n");
+				printf("Invalid input for local\n");
 			}
 			else {
 			
@@ -372,6 +425,7 @@ void runCommand(TokenArr my_tokens) {
 				// If var_name or var_val is null
 				if(var_name == NULL || var_val == NULL) {
 						printf("Error, export failed to assign shell var\n");
+						exit(-1);
 				}
 				else {
 					wshLocal(var_name, var_val);
@@ -382,6 +436,27 @@ void runCommand(TokenArr my_tokens) {
 		case 5: // vars
 			wshVars();
 			break;	
+
+		case 6:
+			if(my_tokens.token_count == 1) {
+				wshGetHist();
+			}
+			else if(my_tokens.token_count == 3) {
+				if(strcmp(my_tokens.tokens[1],"set") !=0) {
+					printf("Invalid input for history\n");
+				}
+					else {
+					int my_val;
+					my_val = atoi(my_tokens.tokens[2]);
+					if(my_val <= 0 ) {
+						printf("Invalid input for history\n");
+						exit(-1);
+					}
+					else {
+						wshSetHist(my_val);
+					}
+				}
+			}
 	}
 }
 
