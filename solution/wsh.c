@@ -5,6 +5,7 @@
 #include <dirent.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <sys/wait.h>
 #include "wsh.h"
 
 // Global vars
@@ -349,13 +350,100 @@ void addHistEntry(char* command) {
 	}
 }
 
+void wshGetHist() {
+	
+}
+
+void wshSetHist(int new_size) {
+	
+}
+
+void removeHistEntry() {
+	
+}
+
+char* getPath(TokenArr my_tokens) {
+	int acc_val;
+
+	// Check if lin wd
+	acc_val = access(my_tokens.tokens[0], X_OK);
+	if(acc_val == 0) {
+		return my_tokens.tokens[0];
+	}
+	else {
+		char* path_ptr;
+		char* path_str;
+		char* full_dir_ptr;
+		int path_var_len;
+
+		path_var_len = strlen(getenv("PATH") + 1);
+		path_str = malloc(path_var_len);
+		if(path_str == NULL) {
+			printf("Error getting path\n");
+			exit(-1);
+		}
+		if(strcpy(path_str, getenv("PATH")) == NULL) {
+			printf("Error getting path\n");
+			exit(-1);
+		}
+
+		full_dir_ptr = malloc(sizeof(char) * 1024);
+		if(full_dir_ptr == NULL) {
+			printf("Error getting path\n");
+			exit(-1);
+		}
+		
+		path_ptr = strtok(path_str, ":");
+		while(path_ptr != NULL) {
+
+			full_dir_ptr[0] = '\0'; // Clearing str
+			
+			// Concat for full path
+			strcat(full_dir_ptr, path_ptr);
+			strcat(full_dir_ptr, "/");
+			strcat(full_dir_ptr, my_tokens.tokens[0]);
+			printf("PATH: %s\n", full_dir_ptr);
+			if(access(full_dir_ptr, X_OK) == 0) {
+				return full_dir_ptr;
+			}
+
+			
+			path_ptr = strtok(NULL, ":"); // Get new path
+			
+		}
+		printf("PATH: %s\n", path_str);
+		return NULL;
+	}
+	
+}
+
 void runCommand(TokenArr my_tokens) {
 	char* my_command = my_tokens.tokens[0];
-
+	char* path_val;
+	int fork_val;
 	switch(checkBuiltIn(my_command)) {
 
 		case -1: // Non built in command
-			printf("[%s] is not a valid command\n", my_command);
+			
+			
+			path_val = getPath(my_tokens);
+			if(path_val == NULL) {
+				printf("Not a valid command\n");
+				exit(-1);
+			}
+
+			fork_val = fork();
+
+			if(fork_val > 0) { // Parent
+				wait(NULL);
+			}
+			else if(fork_val == 0) { // Child
+				execve(path_val, my_tokens.tokens, environ);
+			}
+			else { // ERROR
+				printf("Error executing in child\n");
+				exit(-1);
+			}
 			break;
 			
 		case 0: // exit
