@@ -52,6 +52,6 @@ void wshSetHist(int new_size);
 char* getBuiltIn(char* my_command);
 
 
-void runCommand(TokenArr my_tokens);
+void runCommand(TokenArr my_tokens, char* user_input);
 TokenArr tokenizeString(char* my_str, int input_size);
 

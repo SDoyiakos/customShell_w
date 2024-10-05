@@ -11,6 +11,7 @@
 // Global vars
 extern char** environ;
 struct ShellVar* shellLinkedListHead = NULL;
+struct ShellVar* shellLinkedListTail = NULL;
 
 // History globals
 struct HistEntry* histHead;
@@ -18,17 +19,10 @@ struct HistEntry* histTail;
 int histLimit = 5;
 int histSize = 0;
 
-
 /**
-*	Test function merely for me to see if tokens are being grabbed properly
+* Separates the input across token '='.
+* Returns a TokenArr of the inputs
 **/
-void debugTokens(TokenArr my_tokens) {
-	printf("The tokens in the arr are:\n");
-	for(int i = 0;i < my_tokens.token_count;i++) {
-		printf("%s\n", my_tokens.tokens[i]);
-	}
-}
-
 TokenArr tokenizeString(char* my_str, int input_size) {
 	TokenArr my_tokens;
 	my_tokens.token_count = 0;
@@ -123,7 +117,7 @@ void interactiveMode() {
 			wshExit();
 		}
 		my_tokens = tokenizeString(user_input, *input_size); // Tokenize input
-		runCommand(my_tokens);
+		runCommand(my_tokens, user_input);
 
 
 		for(int i =0; i < my_tokens.token_count;i++) {
@@ -192,6 +186,9 @@ void wshCd(char* new_dir){
 	}
 }
 
+/**
+* Sets environment variable var_name=var_val
+**/
 void wshExport(char* var_name, char* var_val) {
 	int ret_val;
 	ret_val = setenv(var_name, var_val, 1); // Change and overwriting
@@ -209,6 +206,8 @@ void wshExport(char* var_name, char* var_val) {
 void wshVars() {
 	struct ShellVar* var_ptr;
 	var_ptr = shellLinkedListHead;
+
+	// Read until var is null
 	while(var_ptr != NULL) {
 		printf("%s=%s\n",var_ptr->var_name, var_ptr->var_val);
 		var_ptr = var_ptr->next_var;
@@ -255,17 +254,19 @@ int findShellVar(char* var_name) {
 **/
 void wshLocal(char* var_name, char* var_val) {
 	struct ShellVar* shell_var_ptr;
-	int var_loc = findShellVar(var_name);
+	int var_loc;
+	var_loc = findShellVar(var_name);
 	
 	// If the linked list is empty/has no entries
 	if(shellLinkedListHead == NULL) {
 
-		// Allocating head
+		// Allocating head and tail
 		shellLinkedListHead = malloc(sizeof(struct ShellVar));
 		if(shellLinkedListHead == NULL) {
 			printf("Error adding shell var\n");
 			exit(-1);
 		}
+		shellLinkedListTail = shellLinkedListHead;
 		shellLinkedListHead->next_var = NULL;
 		shell_var_ptr = shellLinkedListHead; // New ptr is to head
 	}
@@ -280,12 +281,8 @@ void wshLocal(char* var_name, char* var_val) {
 	// If there is a head to the Linked List
 	else {
 	
-		// Increment pointer until next shell var ptr is null or var name found
-		shell_var_ptr = shellLinkedListHead;
-		while(shell_var_ptr->next_var != NULL) {
-			shell_var_ptr = shell_var_ptr->next_var;
-		}
-
+		shell_var_ptr = shellLinkedListTail;
+		
 		// Allocate next ShellVar in linked list
 		shell_var_ptr->next_var = malloc(sizeof(struct ShellVar));
 		if(shell_var_ptr == NULL) {
@@ -295,6 +292,7 @@ void wshLocal(char* var_name, char* var_val) {
 
 		shell_var_ptr = shell_var_ptr->next_var; // Point to new var
 		shell_var_ptr->next_var = NULL; // Set new vars next var to null
+		shellLinkedListTail = shell_var_ptr; // Set new tail
 	}
 	
 	// Copy vals into new var
@@ -325,7 +323,7 @@ void addHistEntry(char* command) {
 	}
 
 	// >= 1 Entry
-	else {
+	else if(strcmp(histHead->command, command) != 0){
 		struct HistEntry* command_ptr;
 		command_ptr = malloc(sizeof(struct HistEntry));
 		if(command_ptr == NULL) {
@@ -337,35 +335,53 @@ void addHistEntry(char* command) {
 			exit(-1);
 		}
 		command_ptr->next_entry = histHead;
+		histHead->prev_entry = command_ptr;
 		command_ptr->prev_entry = NULL;
+		histHead = command_ptr;
 		histSize++;
 	}
 
 	// Remove any entries over limit 
-	if(histSize > histLimit) {
-		int hist_diff = histSize - histLimit;
-		for(int i = 0;i < hist_diff;i++) {
-			removeHistEntry();
-		}
+	while(histSize > histLimit) {
+		removeHistEntry();
 	}
 }
 
 void wshGetHist() {
-	
+	struct HistEntry* hist_ptr = histHead;
+	for(int i = 0; i < histSize; i++) {
+		printf("%d) %s\n", (i+1), hist_ptr->command);
+		hist_ptr = hist_ptr->next_entry;
+	}
 }
 
-void wshSetHist(int new_size) {
-	
+void wshSetHist(int new_limit) {
+	int size_diff;
+	histLimit = new_limit;
+
+	size_diff = histSize - histLimit;
+
+	while(size_diff > 0) {
+		removeHistEntry();
+		size_diff = histSize - histLimit;
+	}	
 }
 
 void removeHistEntry() {
-	
+	struct HistEntry* hist_ptr = histTail;
+	histTail = hist_ptr->prev_entry;
+	free(histTail->next_entry);
+	histTail->next_entry = NULL;
+	histSize--;
 }
 
+/**
+* Retrieves the path to a program, first full or relative and then $PATH
+**/
 char* getPath(TokenArr my_tokens) {
 	int acc_val;
 
-	// Check if lin wd
+	// Check if in wd
 	acc_val = access(my_tokens.tokens[0], X_OK);
 	if(acc_val == 0) {
 		return my_tokens.tokens[0];
@@ -374,10 +390,8 @@ char* getPath(TokenArr my_tokens) {
 		char* path_ptr;
 		char* path_str;
 		char* full_dir_ptr;
-		int path_var_len;
 
-		path_var_len = strlen(getenv("PATH") + 1);
-		path_str = malloc(path_var_len);
+		path_str = malloc(sizeof(char) * MAX_DIR_SIZE);
 		if(path_str == NULL) {
 			printf("Error getting path\n");
 			exit(-1);
@@ -387,12 +401,14 @@ char* getPath(TokenArr my_tokens) {
 			exit(-1);
 		}
 
-		full_dir_ptr = malloc(sizeof(char) * 1024);
+		// Allocate mem for the dir
+		full_dir_ptr = malloc(sizeof(char) * MAX_DIR_SIZE);
 		if(full_dir_ptr == NULL) {
 			printf("Error getting path\n");
 			exit(-1);
 		}
-		
+
+		// Check for each path
 		path_ptr = strtok(path_str, ":");
 		while(path_ptr != NULL) {
 
@@ -402,22 +418,22 @@ char* getPath(TokenArr my_tokens) {
 			strcat(full_dir_ptr, path_ptr);
 			strcat(full_dir_ptr, "/");
 			strcat(full_dir_ptr, my_tokens.tokens[0]);
-			printf("PATH: %s\n", full_dir_ptr);
+
+			// Check for exec access
 			if(access(full_dir_ptr, X_OK) == 0) {
 				return full_dir_ptr;
 			}
 
-			
+			free(path_ptr); 
 			path_ptr = strtok(NULL, ":"); // Get new path
 			
 		}
-		printf("PATH: %s\n", path_str);
-		return NULL;
+		return NULL; // No path found
 	}
 	
 }
 
-void runCommand(TokenArr my_tokens) {
+void runCommand(TokenArr my_tokens, char* user_input) {
 	char* my_command = my_tokens.tokens[0];
 	char* path_val;
 	int fork_val;
@@ -436,6 +452,8 @@ void runCommand(TokenArr my_tokens) {
 
 			if(fork_val > 0) { // Parent
 				wait(NULL);
+				addHistEntry(user_input);
+				free(path_val);
 			}
 			else if(fork_val == 0) { // Child
 				execve(path_val, my_tokens.tokens, environ);
@@ -525,7 +543,7 @@ void runCommand(TokenArr my_tokens) {
 			wshVars();
 			break;	
 
-		case 6:
+		case 6: // history
 			if(my_tokens.token_count == 1) {
 				wshGetHist();
 			}
@@ -549,6 +567,7 @@ void runCommand(TokenArr my_tokens) {
 }
 
 int main(int argc, char* argv[]) {
+	wshExport("PATH", "/bin");
 	if(argc == 1) {
 		interactiveMode();
 	}
