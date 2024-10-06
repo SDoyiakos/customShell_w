@@ -39,7 +39,7 @@ const char* COMMAND_ARR[] =
 
 // BUILT IN FUNCTIONS
 void wshExit();
-void wshLs();
+int wshLs();
 void wshCd(char* new_dir);
 void wshExport(char* var_name, char* var_val);
 void wshLocal(char* var_name, char* var_val);

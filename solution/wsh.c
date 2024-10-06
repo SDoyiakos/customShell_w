@@ -142,37 +142,24 @@ void wshExit() {
 * Shell built in ls function
 * Performs like bash's ls -1
 **/
-void wshLs() {
-	DIR* dp;
-	struct dirent* my_dirent;
-
-	// Open dir and check that the open worked
-	dp = opendir(".");
-	if(dp == NULL) {
-		printf("Could not run ls on current directory\n");
-		exit(-1);
-	}
-
+int wshLs() {
+	int dir_ret;
+	struct dirent** my_dirent;
 	// Read until null
-	my_dirent = readdir(dp);
-	while(my_dirent != NULL) {
-		if((my_dirent->d_name)[0] != '.') { // Ignore hidden files
-			printf("%s", my_dirent->d_name); // Print file name
-			if(my_dirent->d_type == DT_DIR) { // Append / on a dir
+	dir_ret = scandir(".", &my_dirent, 0, alphasort);
+	if(dir_ret == -1) { // Error case
+		return -1;
+	}
+	for(int i = 0;i < dir_ret; i++) {
+		if(my_dirent[i]->d_name[0] != '.') {
+			printf("%s", my_dirent[i]->d_name);
+			if(my_dirent[i]->d_type == DT_DIR) {
 				printf("/");
 			}
 			printf("\n");
-		}	
-		my_dirent = readdir(dp);
+		}
 	}
-
-	// Check for errors
-	if(errno == EBADF) {
-		printf("Could not run ls on current directory\n");
-		exit(-1);
-	}
-
-	closedir(dp);
+	return 0;
 }
 
 /**
