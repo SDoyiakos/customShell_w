@@ -48,7 +48,7 @@ TokenArr tokenizeString(char* my_str, int input_size) {
 	}
 
 	// Allocate token arr
-	my_tokens.tokens = malloc(my_tokens.token_count * sizeof(char*));
+	my_tokens.tokens = malloc( (my_tokens.token_count * sizeof(char*)) + sizeof(char*) );
 	if(my_tokens.tokens == NULL) {
 		printf("Error retrieving command\nExiting\n");
 		exit(-1);
@@ -74,6 +74,7 @@ TokenArr tokenizeString(char* my_str, int input_size) {
 			strcpy(my_tokens.tokens[i], token_buf);
 		}
 	}
+	my_tokens.tokens[my_tokens.token_count] = NULL; // Last entry null for execve if needed
 	free(my_str_cpy); // Free the copy
 	return my_tokens;	
 }
@@ -95,7 +96,7 @@ void parseInputs(char* input_buffer, int* input_size) {
 	}
 
 	// Sanitize string to not include \n
-	else if(*input_size > 1){
+	else if(*input_size >= 1){
 		input_buffer[*input_size - 1] = '\0';
 		(*input_size)--;
 	}
@@ -116,18 +117,17 @@ void interactiveMode() {
 		if(feof(stdin)) {
 			wshExit();
 		}
-		my_tokens = tokenizeString(user_input, *input_size); // Tokenize input
-		runCommand(my_tokens, user_input);
 
-
-		for(int i =0; i < my_tokens.token_count;i++) {
-			free(my_tokens.tokens[i]);
+		if(*input_size != 0) {
+			my_tokens = tokenizeString(user_input, *input_size); // Tokenize input
+			runCommand(my_tokens, user_input);
+			for(int i =0; i < my_tokens.token_count;i++) {
+				free(my_tokens.tokens[i]);
+			}
+			free(my_tokens.tokens);
 		}
-		free(my_tokens.tokens);
 	}
-
 	exit(0);
-	
 }
 
 /**
@@ -433,7 +433,7 @@ char* getPath(TokenArr my_tokens) {
 	
 }
 
-void runCommand(TokenArr my_tokens, char* user_input) {
+int runCommand(TokenArr my_tokens, char* user_input) {
 	char* my_command = my_tokens.tokens[0];
 	char* path_val;
 	int fork_val;
@@ -441,11 +441,10 @@ void runCommand(TokenArr my_tokens, char* user_input) {
 
 		case -1: // Non built in command
 			
-			
 			path_val = getPath(my_tokens);
 			if(path_val == NULL) {
 				printf("Not a valid command\n");
-				exit(-1);
+				return -1;
 			}
 
 			fork_val = fork();
@@ -460,7 +459,7 @@ void runCommand(TokenArr my_tokens, char* user_input) {
 			}
 			else { // ERROR
 				printf("Error executing in child\n");
-				exit(-1);
+				return -1;
 			}
 			break;
 			
@@ -469,6 +468,7 @@ void runCommand(TokenArr my_tokens, char* user_input) {
 			// Checking for zero flags or parameters
 			if(my_tokens.token_count > 1) {
 				printf("Error, exit should be used with no parameters\n");
+				return -1;
 			}
 			else {
 				wshExit();
@@ -480,6 +480,7 @@ void runCommand(TokenArr my_tokens, char* user_input) {
 			// Checking for zero flags or parameters
 			if(my_tokens.token_count > 1) {
 				printf("Error, ls should be used with no parameters\n");
+				return -1;
 			}
 			else{
 				wshLs();
@@ -490,6 +491,7 @@ void runCommand(TokenArr my_tokens, char* user_input) {
 			// Checking for exactly one arg
 			if(my_tokens.token_count != 2) {
 				printf("Error, cd should be used with a single argument\n");
+				return -1;
 			}
 			else {
 				wshCd(my_tokens.tokens[1]);
@@ -499,6 +501,7 @@ void runCommand(TokenArr my_tokens, char* user_input) {
 
 			if(my_tokens.token_count != 2) {
 				printf("Error, export should be used in the manner, export VAR=value\n");
+				return -1;
 			}
 			else {
 				char* var_name;
@@ -509,6 +512,7 @@ void runCommand(TokenArr my_tokens, char* user_input) {
 				// If var_name or var_val is null
 				if(var_name == NULL || var_val == NULL) {
 					printf("Error, export failed to assign environ var\n");
+					return -1;
 				}
 				else {
 					wshExport(var_name, var_val);
@@ -520,6 +524,7 @@ void runCommand(TokenArr my_tokens, char* user_input) {
 			printf("Running Local\n");
 			if(my_tokens.token_count !=2) {
 				printf("Invalid input for local\n");
+				return -1;
 			}
 			else {
 			
@@ -531,7 +536,7 @@ void runCommand(TokenArr my_tokens, char* user_input) {
 				// If var_name or var_val is null
 				if(var_name == NULL || var_val == NULL) {
 						printf("Error, export failed to assign shell var\n");
-						exit(-1);
+						return -1;
 				}
 				else {
 					wshLocal(var_name, var_val);
@@ -556,7 +561,7 @@ void runCommand(TokenArr my_tokens, char* user_input) {
 					my_val = atoi(my_tokens.tokens[2]);
 					if(my_val <= 0 ) {
 						printf("Invalid input for history\n");
-						exit(-1);
+						return -1;
 					}
 					else {
 						wshSetHist(my_val);
@@ -564,6 +569,7 @@ void runCommand(TokenArr my_tokens, char* user_input) {
 				}
 			}
 	}
+	return -1;
 }
 
 int main(int argc, char* argv[]) {
