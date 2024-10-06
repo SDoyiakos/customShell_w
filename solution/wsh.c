@@ -342,6 +342,16 @@ void wshGetHist() {
 	}
 }
 
+struct HistEntry* getHistEntry(int index) {
+	index = index-1;
+	struct HistEntry* ret_val;
+	ret_val = histHead;
+	for(int i = 0; i < index;i++) {
+		ret_val = ret_val->next_entry;
+	}
+	return ret_val;
+}
+
 void wshSetHist(int new_limit) {
 	int size_diff;
 	histLimit = new_limit;
@@ -555,8 +565,21 @@ int runCommand(TokenArr my_tokens, char* user_input) {
 					}
 				}
 			}
+			else if(my_tokens.token_count == 2) {
+				int my_val;
+				my_val = atoi(my_tokens.tokens[1]);
+				if(my_val <=0 || my_val > histSize) {
+					printf("Invalid input for history\n");
+					return -1;
+				}
+				else {
+					struct HistEntry* my_entry = getHistEntry(my_val);
+					runCommand(tokenizeString(my_entry->command, SHELL_MAX_INPUT),
+					my_entry->command);
+				}
+			}
 	}
-	return -1;
+	return 0;
 }
 
 int main(int argc, char* argv[]) {
