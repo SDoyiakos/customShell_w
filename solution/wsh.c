@@ -102,6 +102,22 @@ void parseInputs(char* input_buffer, int* input_size) {
 	}
 }
 
+void substituteShellVars(TokenArr my_tokens) {
+	char* my_var;
+	for(int i = 0;i< my_tokens.token_count;i++) {
+		if(my_tokens.tokens[i][0] == '$') {
+			my_var = &my_tokens.tokens[i][1];
+			my_var = getShellVar(my_var);
+			free(my_tokens.tokens[i]);
+			my_tokens.tokens[i] = malloc(strlen(my_var) + 1);
+			if(my_tokens.tokens[i] == NULL) {
+				printf("Malloc error\n");
+				exit(-1);
+			}
+			strcpy(my_tokens.tokens[i], my_var);
+		}
+	}
+}
 
 void interactiveMode() {
 	TokenArr my_tokens;
@@ -111,6 +127,7 @@ void interactiveMode() {
 	// Run loop until exit
 	while(1) {
 		printf("wsh> ");
+		fflush(stdout);
 		parseInputs(user_input, input_size);	
 
 		// Check for EOF after getting input
@@ -120,14 +137,15 @@ void interactiveMode() {
 
 		if(*input_size != 0) {
 			my_tokens = tokenizeString(user_input, *input_size); // Tokenize input
-			runCommand(my_tokens, user_input);
+			substituteShellVars(my_tokens);
+			runCommand(my_tokens);
 			for(int i =0; i < my_tokens.token_count;i++) {
 				free(my_tokens.tokens[i]);
 			}
 			free(my_tokens.tokens);
 		}
 	}
-	exit(0);
+	wshExit();
 }
 
 /**
@@ -215,6 +233,17 @@ int checkBuiltIn(char* my_command) {
 	return -1;
 }
 
+char* getShellVar(char* var_name) {
+	struct ShellVar* my_var;
+	my_var = shellLinkedListHead;
+	while(my_var != NULL) {
+		if(strcmp(my_var->var_name, var_name) == 0) {
+			return my_var->var_val;
+		}
+	}
+	return "";
+}
+
 /**
 * Gets the index of a shell variable
 **/
@@ -289,7 +318,22 @@ void wshLocal(char* var_name, char* var_val) {
 	}	
 }
 
-void addHistEntry(char* command) { 
+/**
+* Takes in two TokenArrs and returns 0 if ne and 1 if equal
+**/
+int tokenCmp(TokenArr arr1, TokenArr arr2) {
+	if(arr1.token_count != arr2.token_count) {
+		return 0;
+	}
+	for(int i = 0; i < arr1.token_count;i++) {
+		if(strcmp(arr1.tokens[i],arr2.tokens[i]) != 0) {
+			return 0;
+		}
+	}
+	return 1;
+}
+
+int addHistEntry(TokenArr my_tokens) { 
 	char error_message[] = "Error adding command to history";
 
 	// Adding first entry
@@ -300,26 +344,20 @@ void addHistEntry(char* command) {
 			printf("%s\n", error_message);
 			exit(-1);
 		}
-		if(strcpy(histHead->command, command) == NULL) {
-			printf("%s\n", error_message);
-			exit(-1);
-		}
 		histHead->next_entry = NULL;
 		histHead->prev_entry = NULL;
 		histSize++;
+
+		
 	}
 
 	// >= 1 Entry
-	else if(strcmp(histHead->command, command) != 0){
+	else if(tokenCmp(histHead->entry_tokens, my_tokens) != 1){
 		struct HistEntry* command_ptr;
 		command_ptr = malloc(sizeof(struct HistEntry));
 		if(command_ptr == NULL) {
 			printf("%s\n", error_message);
-			exit(-1);
-		}
-		if(strcpy(command_ptr->command, command) == NULL) {
-			printf("%s\n", error_message);
-			exit(-1);
+			return -1;
 		}
 		command_ptr->next_entry = histHead;
 		histHead->prev_entry = command_ptr;
@@ -332,12 +370,18 @@ void addHistEntry(char* command) {
 	while(histSize > histLimit) {
 		removeHistEntry();
 	}
+	return 0;
 }
 
 void wshGetHist() {
+	printf("TOKENS: %s\n", histHead->entry_tokens.tokens[0]);
 	struct HistEntry* hist_ptr = histHead;
 	for(int i = 0; i < histSize; i++) {
-		printf("%d) %s\n", (i+1), hist_ptr->command);
+		printf("%d) ", i - 1);
+		for(int j = 0;j < hist_ptr->entry_tokens.token_count;j++) {
+			printf("%s ", hist_ptr->entry_tokens.tokens[j]);
+		}
+		printf("\n");
 		hist_ptr = hist_ptr->next_entry;
 	}
 }
@@ -430,7 +474,7 @@ char* getPath(TokenArr my_tokens) {
 	
 }
 
-int runCommand(TokenArr my_tokens, char* user_input) {
+int runCommand(TokenArr my_tokens) {
 	char* my_command = my_tokens.tokens[0];
 	char* path_val;
 	int fork_val;
@@ -448,8 +492,8 @@ int runCommand(TokenArr my_tokens, char* user_input) {
 
 			if(fork_val > 0) { // Parent
 				wait(NULL);
-				addHistEntry(user_input);
-				free(path_val);
+				addHistEntry(my_tokens);
+				//free(path_val);
 			}
 			else if(fork_val == 0) { // Child
 				execve(path_val, my_tokens.tokens, environ);
@@ -574,8 +618,7 @@ int runCommand(TokenArr my_tokens, char* user_input) {
 				}
 				else {
 					struct HistEntry* my_entry = getHistEntry(my_val);
-					runCommand(tokenizeString(my_entry->command, SHELL_MAX_INPUT),
-					my_entry->command);
+					runCommand(my_entry->entry_tokens);
 				}
 			}
 	}
