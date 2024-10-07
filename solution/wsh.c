@@ -78,12 +78,12 @@ TokenArr* tokenizeString(char* my_str) {
 	return my_tokens;	
 }
 
-void parseInputs(char* input_buffer, int* input_size) {
+void parseInputs(char* input_buffer, int* input_size, FILE* input_stream) {
 	
 	size_t buffer_len = SHELL_MAX_INPUT; // The size of the buffer
 	
 	// Getting next user input
-	*input_size = getline(&input_buffer, &buffer_len, stdin);
+	*input_size = getline(&input_buffer, &buffer_len, input_stream);
 
 	// Checking whether input has errors or not
 	if(*input_size == -1) {
@@ -120,27 +120,31 @@ void substituteShellVars(TokenArr* my_tokens) {
 	}
 }
 
-void interactiveMode() {
+void interactiveMode(FILE* input_stream) {
 	TokenArr* my_tokens;
 	char* user_input = malloc(SHELL_MAX_INPUT * sizeof(char));
 	int* input_size = malloc(sizeof(int));
 
 	// Run loop until exit
 	while(1) {
-		printf("wsh> ");
-		fflush(stdout);
-		parseInputs(user_input, input_size);	
+		if(input_stream == stdin) {
+			printf("wsh> ");
+			fflush(stdout);
+		}	
+		
+		parseInputs(user_input, input_size, input_stream);	
 		my_tokens = NULL;
 		// Check for EOF after getting input
-		if(feof(stdin)) {
+		if(feof(input_stream)) {
 			wshExit();
 		}
 
 		if(*input_size != 0) {
 			my_tokens = tokenizeString(user_input); // Tokenize input
-			substituteShellVars(my_tokens);
-			runCommand(my_tokens);
-
+			if(my_tokens->tokens[0][0] != '#') {				
+				substituteShellVars(my_tokens);
+				runCommand(my_tokens);
+			}
 			freeTokenArr(my_tokens);
 		}
 	}
@@ -243,6 +247,7 @@ char* getShellVar(char* var_name) {
 		if(strcmp(my_var->var_name, var_name) == 0) {
 			return my_var->var_val;
 		}
+		my_var = my_var->next_var;
 	}
 	return "";
 }
@@ -631,6 +636,9 @@ int runCommand(TokenArr* my_tokens) {
 				char* var_val;
 				var_name = strtok(my_tokens->tokens[1], "=");
 				var_val = strtok(NULL, "=");
+				if(var_val[0] == '$') {
+					var_val = getShellVar(&var_val[1]);
+				}
 				
 				// If var_name or var_val is null
 				if(var_name == NULL || var_val == NULL) {
@@ -684,8 +692,21 @@ int runCommand(TokenArr* my_tokens) {
 }
 
 int main(int argc, char* argv[]) {
+	FILE* sh_file;
 	wshExport("PATH", "/bin");
 	if(argc == 1) {
-		interactiveMode();
+		interactiveMode(stdin);
+	}
+	else if(argc == 2) {
+		sh_file = fopen(argv[1], "r");
+		if(sh_file != NULL) {
+			interactiveMode(sh_file);
+		}
+		else {
+			printf("Error running shell file\n");
+		}
+	}
+	else {
+		printf("Wsh can only be run with 0 or 1 params\n");
 	}
 }
