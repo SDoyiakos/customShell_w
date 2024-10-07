@@ -19,11 +19,11 @@ typedef struct {
 } TokenArr;
 
 struct HistEntry {
-	TokenArr entry_tokens;
+	TokenArr* entry_tokens;
 	struct HistEntry* next_entry;
 	struct HistEntry* prev_entry;
 };
-int addHistEntry(TokenArr my_tokens);
+int addHistEntry(TokenArr* my_tokens);
 void removeHistEntry();
 
 
@@ -52,8 +52,9 @@ void wshSetHist(int new_size);
 
 // Internal shell functions
 char* getBuiltIn(char* my_command);
+void freeTokenArr(TokenArr* my_tokens);
 
 
-int runCommand(TokenArr my_tokens);
-TokenArr tokenizeString(char* my_str, int input_size);
+int runCommand(TokenArr* my_tokens);
+TokenArr* tokenizeString(char* my_str);
 

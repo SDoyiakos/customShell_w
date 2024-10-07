@@ -19,63 +19,62 @@ struct HistEntry* histTail;
 int histLimit = 5;
 int histSize = 0;
 
+
+/**
+ *Test function merely for me to see if tokens are being grabbed properly
+ **/
+void debugTokens(TokenArr* my_tokens) {
+  printf("The tokens in the arr are:\n");
+  for(int i = 0;i < my_tokens->token_count;i++) {
+    printf("%s\n", my_tokens->tokens[i]);
+  }
+}
+
 /**
 * Separates the input across token '='.
 * Returns a TokenArr of the inputs
 **/
-TokenArr tokenizeString(char* my_str, int input_size) {
-	TokenArr my_tokens;
-	my_tokens.token_count = 0;
-	const char DELIM = ' ';
+TokenArr* tokenizeString(char* my_str) {
+	char error_message[] = "Error tokenizing string";
+	char* next_token;
+	int token_arr_size;
+	TokenArr* my_tokens = malloc(sizeof(TokenArr));
+	if(my_tokens == NULL) {
+		printf("%s\n", error_message);
+	}
 	
-	// Allocated char count + 1 as we need the /0
-	char* my_str_cpy = malloc(sizeof(char) + (input_size * sizeof(char)));
-	if(my_str_cpy == NULL) {
+	my_tokens->token_count = 0;
+	
+
+	token_arr_size = 10; // Start with array of limit
+	my_tokens->tokens = malloc(token_arr_size * sizeof(char*));
+	if(my_tokens->tokens == NULL) {
+		printf("%s\n", error_message);
 		exit(-1);
 	}
-
-	// Copy string
-	if(strcpy(my_str_cpy, my_str) == NULL) {
-		exit(-1);
-	}
 	
-	// Get amount of tokens
-	if(strtok(my_str_cpy, &DELIM) != NULL) {
-		my_tokens.token_count++;
-	}
-	while(strtok(NULL, &DELIM) != NULL) {
-		my_tokens.token_count++;
-	}
-
-	// Allocate token arr
-	my_tokens.tokens = malloc( (my_tokens.token_count * sizeof(char*)) + sizeof(char*) );
-	if(my_tokens.tokens == NULL) {
-		printf("Error retrieving command\nExiting\n");
-		exit(-1);
-	}
-
-	// Copy tokens into token arr
+	next_token = strtok(my_str, " ");
+	while(next_token != NULL) {
 	
-	if(my_tokens.token_count > 0) {
-		char* token_buf;
-		token_buf = strtok(my_str, &DELIM);
-		my_tokens.tokens[0] = malloc(strlen(token_buf) + sizeof(char));
-		strcpy(my_tokens.tokens[0], token_buf);
-	
-		for(int i = 1; i < my_tokens.token_count;i++) {
-			token_buf = strtok(NULL, &DELIM); // Check for errors later
-			my_tokens.tokens[i] = malloc(strlen(token_buf) + sizeof(char));
-
-			if(my_tokens.tokens[i] == NULL) {
-				printf("Error Parsing Input\n");
+		// Check if there is enough space and realloc otherwise
+		if(my_tokens->token_count + 2 == token_arr_size) {
+			char* alloc_ret = NULL;
+			alloc_ret = realloc(my_tokens->tokens, (token_arr_size * sizeof(char*)) + sizeof(char*));
+			if(alloc_ret == NULL) {
+				printf("Error tokenizing string\n");
 				exit(-1);
 			}
-			
-			strcpy(my_tokens.tokens[i], token_buf);
+			token_arr_size++;
 		}
+		my_tokens->tokens[my_tokens->token_count] = strdup(next_token);
+		my_tokens->token_count++;
+		
+		next_token = strtok(NULL, " ");
+		
 	}
-	my_tokens.tokens[my_tokens.token_count] = NULL; // Last entry null for execve if needed
-	free(my_str_cpy); // Free the copy
+
+	my_tokens->tokens[my_tokens->token_count] = NULL; // Use for terminating as args
+	
 	return my_tokens;	
 }
 
@@ -102,27 +101,27 @@ void parseInputs(char* input_buffer, int* input_size) {
 	}
 }
 
-void substituteShellVars(TokenArr my_tokens) {
+void substituteShellVars(TokenArr* my_tokens) {
 	char* my_var;
-	for(int i = 0;i< my_tokens.token_count;i++) {
-		if(my_tokens.tokens[i][0] == '$') { // If token is a var
-			my_var = &my_tokens.tokens[i][1]; // Retrieve str without the $
+	for(int i = 0;i< my_tokens->token_count;i++) {
+		if(my_tokens->tokens[i][0] == '$') { // If token is a var
+			my_var = &my_tokens->tokens[i][1]; // Retrieve str without the $
 			my_var = getShellVar(my_var); // Get the vars value
 
 			// Replacing the token with the var's value
-			free(my_tokens.tokens[i]);
-			my_tokens.tokens[i] = malloc(strlen(my_var) + 1);
-			if(my_tokens.tokens[i] == NULL) {
+			free(my_tokens->tokens[i]);
+			my_tokens->tokens[i] = malloc(strlen(my_var) + 1);
+			if(my_tokens->tokens[i] == NULL) {
 				printf("Malloc error\n");
 				exit(-1);
 			}
-			strcpy(my_tokens.tokens[i], my_var);
+			strcpy(my_tokens->tokens[i], my_var);
 		}
 	}
 }
 
 void interactiveMode() {
-	TokenArr my_tokens;
+	TokenArr* my_tokens;
 	char* user_input = malloc(SHELL_MAX_INPUT * sizeof(char));
 	int* input_size = malloc(sizeof(int));
 
@@ -131,18 +130,18 @@ void interactiveMode() {
 		printf("wsh> ");
 		fflush(stdout);
 		parseInputs(user_input, input_size);	
-
+		my_tokens = NULL;
 		// Check for EOF after getting input
 		if(feof(stdin)) {
 			wshExit();
 		}
 
 		if(*input_size != 0) {
-			my_tokens = tokenizeString(user_input, *input_size); // Tokenize input
+			my_tokens = tokenizeString(user_input); // Tokenize input
 			substituteShellVars(my_tokens);
 			runCommand(my_tokens);
 
-			// INTENTIONALLY LEAKING MEM
+			freeTokenArr(my_tokens);
 		}
 	}
 	wshExit();
@@ -325,19 +324,45 @@ void wshLocal(char* var_name, char* var_val) {
 /**
 * Takes in two TokenArrs and returns 0 if ne and 1 if equal
 **/
-int tokenCmp(TokenArr arr1, TokenArr arr2) {
-	if(arr1.token_count != arr2.token_count) {
+int tokenCmp(TokenArr* arr1, TokenArr* arr2) {
+	if(arr1->token_count != arr2->token_count) {
 		return 0;
 	}
-	for(int i = 0; i < arr1.token_count;i++) {
-		if(strcmp(arr1.tokens[i],arr2.tokens[i]) != 0) {
+	for(int i = 0; i < arr1->token_count;i++) {
+		if(strcmp(arr1->tokens[i],arr2->tokens[i]) != 0) {
 			return 0;
 		}
 	}
 	return 1;
 }
 
-int addHistEntry(TokenArr my_tokens) { 
+TokenArr* copyTokenArr(TokenArr* my_tokens) {
+	char error_message[] = "Error copying token arr";
+	TokenArr* my_copy;
+	my_copy = malloc(sizeof(TokenArr));
+	if(my_copy == NULL) {
+		printf("%s\n", error_message);
+		return NULL;
+	}
+	my_copy->token_count = my_tokens->token_count;
+	my_copy->tokens = malloc( (my_copy->token_count + 1) * sizeof(char*));
+	if(my_copy->tokens == NULL) {
+		printf("%s\n", error_message);
+		return NULL;
+	}
+	for(int i = 0;i < my_copy->token_count;i++) {
+		my_copy->tokens[i] = malloc(strlen(my_tokens->tokens[i]) + sizeof(char*));
+		if(my_copy->tokens[i] == NULL) {
+			printf("%s\n", error_message);
+			return NULL;
+		}
+		strcpy(my_copy->tokens[i], my_tokens->tokens[i]);
+	}
+	my_copy->tokens[my_copy->token_count] = NULL;
+	return my_copy;
+}
+
+int addHistEntry(TokenArr* my_tokens) { 
 	char error_message[] = "Error adding command to history";
 
 	// Adding first entry
@@ -348,12 +373,15 @@ int addHistEntry(TokenArr my_tokens) {
 			printf("%s\n", error_message);
 			exit(-1);
 		}
-		histHead->entry_tokens = my_tokens;
+
+		// Create a copy of the tokens at head entry
+		histHead->entry_tokens = copyTokenArr(my_tokens);
+		
+		
 		histHead->next_entry = NULL;
 		histHead->prev_entry = NULL;
 		histSize++;
-
-		
+	
 	}
 
 	// >= 1 Entry
@@ -364,7 +392,7 @@ int addHistEntry(TokenArr my_tokens) {
 			printf("%s\n", error_message);
 			return -1;
 		}
-		command_ptr->entry_tokens = my_tokens;
+		command_ptr->entry_tokens = copyTokenArr(my_tokens);
 		command_ptr->next_entry = histHead;
 		histHead->prev_entry = command_ptr;
 		command_ptr->prev_entry = NULL;
@@ -383,9 +411,9 @@ void wshGetHist() {
 	struct HistEntry* hist_ptr = histHead;
 	for(int i = 0; i < histSize; i++) {
 		printf("%d) ", i + 1);
-		for(int j = 0;j < hist_ptr->entry_tokens.token_count;j++) {
-			printf("%s", hist_ptr->entry_tokens.tokens[j]);
-			if(j != hist_ptr->entry_tokens.token_count -1 ) { // Only print space if not last token
+		for(int j = 0;j < hist_ptr->entry_tokens->token_count;j++) {
+			printf("%s", hist_ptr->entry_tokens->tokens[j]);
+			if(j != hist_ptr->entry_tokens->token_count -1 ) { // Only print space if not last token
 				printf(" ");
 			}
 		}
@@ -416,8 +444,18 @@ void wshSetHist(int new_limit) {
 	}	
 }
 
+void freeTokenArr(TokenArr* my_tokens) {
+
+	for(int i = 0;i < my_tokens->token_count;i++) {
+		free(my_tokens->tokens[i]);
+	}
+	free(my_tokens->tokens);
+	free(my_tokens);
+}
+
 void removeHistEntry() {
 	struct HistEntry* hist_ptr = histTail;
+	freeTokenArr(hist_ptr->entry_tokens);
 	histTail = hist_ptr->prev_entry;
 	free(histTail->next_entry);
 	histTail->next_entry = NULL;
@@ -427,13 +465,19 @@ void removeHistEntry() {
 /**
 * Retrieves the path to a program, first full or relative and then $PATH
 **/
-char* getPath(TokenArr my_tokens) {
+char* getPath(TokenArr* my_tokens) {
 	int acc_val;
-
+	char* command_cpy;
+	command_cpy = malloc(strlen(my_tokens->tokens[0]) + sizeof(char*));
+	if(command_cpy == NULL) {
+		return NULL;
+	}
+	strcpy(command_cpy, my_tokens->tokens[0]);
+	
 	// Check if in wd
-	acc_val = access(my_tokens.tokens[0], X_OK);
+	acc_val = access(command_cpy, X_OK);
 	if(acc_val == 0) {
-		return my_tokens.tokens[0];
+		return command_cpy;
 	}
 	else {
 		char* path_ptr;
@@ -466,29 +510,33 @@ char* getPath(TokenArr my_tokens) {
 			// Concat for full path
 			strcat(full_dir_ptr, path_ptr);
 			strcat(full_dir_ptr, "/");
-			strcat(full_dir_ptr, my_tokens.tokens[0]);
-
+			strcat(full_dir_ptr, command_cpy);
+			
 			// Check for exec access
 			if(access(full_dir_ptr, X_OK) == 0) {
+				free(path_str);
+				free(command_cpy);
 				return full_dir_ptr;
 			}
 
-			free(path_ptr); 
 			path_ptr = strtok(NULL, ":"); // Get new path
+			strcpy(command_cpy, my_tokens->tokens[0]);
 			
 		}
+		free(path_str);
+		free(command_cpy);
 		return NULL; // No path found
 	}
 	
 }
 
-int runCommand(TokenArr my_tokens) {
-	char* my_command = my_tokens.tokens[0];
+int runCommand(TokenArr* my_tokens) {
+	char* my_command = my_tokens->tokens[0];
 	char* path_val;
 	int fork_val;
 	switch(checkBuiltIn(my_command)) {
-
 		case -1: // Non built in command
+			
 			
 			path_val = getPath(my_tokens);
 			if(path_val == NULL) {
@@ -499,12 +547,15 @@ int runCommand(TokenArr my_tokens) {
 			fork_val = fork();
 
 			if(fork_val > 0) { // Parent
-				wait(NULL);
 				addHistEntry(my_tokens);
-				//free(path_val);
+				wait(NULL);
+				if(path_val != NULL) {
+					free(path_val);
+				}
+				
 			}
 			else if(fork_val == 0) { // Child
-				execve(path_val, my_tokens.tokens, environ);
+				return execve(path_val, my_tokens->tokens, environ);
 			}
 			else { // ERROR
 				printf("Error executing in child\n");
@@ -515,7 +566,7 @@ int runCommand(TokenArr my_tokens) {
 		case 0: // exit
 
 			// Checking for zero flags or parameters
-			if(my_tokens.token_count > 1) {
+			if(my_tokens->token_count > 1) {
 				printf("Error, exit should be used with no parameters\n");
 				return -1;
 			}
@@ -527,7 +578,7 @@ int runCommand(TokenArr my_tokens) {
 		case 1: // ls
 		
 			// Checking for zero flags or parameters
-			if(my_tokens.token_count > 1) {
+			if(my_tokens->token_count > 1) {
 				printf("Error, ls should be used with no parameters\n");
 				return -1;
 			}
@@ -538,24 +589,24 @@ int runCommand(TokenArr my_tokens) {
 		case 2: // cd
 
 			// Checking for exactly one arg
-			if(my_tokens.token_count != 2) {
+			if(my_tokens->token_count != 2) {
 				printf("Error, cd should be used with a single argument\n");
 				return -1;
 			}
 			else {
-				wshCd(my_tokens.tokens[1]);
+				wshCd(my_tokens->tokens[1]);
 			}
 			break;
 		case 3:
 
-			if(my_tokens.token_count != 2) {
+			if(my_tokens->token_count != 2) {
 				printf("Error, export should be used in the manner, export VAR=value\n");
 				return -1;
 			}
 			else {
 				char* var_name;
 				char* var_val;
-				var_name = strtok(my_tokens.tokens[1], "=");
+				var_name = strtok(my_tokens->tokens[1], "=");
 				var_val = strtok(NULL, "=");
 
 				// If var_name or var_val is null
@@ -570,7 +621,7 @@ int runCommand(TokenArr my_tokens) {
 			break;
 
 		case 4:
-			if(my_tokens.token_count !=2) {
+			if(my_tokens->token_count !=2) {
 				printf("Invalid input for local\n");
 				return -1;
 			}
@@ -578,7 +629,7 @@ int runCommand(TokenArr my_tokens) {
 			
 				char* var_name;
 				char* var_val;
-				var_name = strtok(my_tokens.tokens[1], "=");
+				var_name = strtok(my_tokens->tokens[1], "=");
 				var_val = strtok(NULL, "=");
 				
 				// If var_name or var_val is null
@@ -597,16 +648,16 @@ int runCommand(TokenArr my_tokens) {
 			break;	
 
 		case 6: // history
-			if(my_tokens.token_count == 1) {
+			if(my_tokens->token_count == 1) {
 				wshGetHist();
 			}
-			else if(my_tokens.token_count == 3) {
-				if(strcmp(my_tokens.tokens[1],"set") !=0) {
+			else if(my_tokens->token_count == 3) {
+				if(strcmp(my_tokens->tokens[1],"set") !=0) {
 					printf("Invalid input for history\n");
 				}
 					else {
 					int my_val;
-					my_val = atoi(my_tokens.tokens[2]);
+					my_val = atoi(my_tokens->tokens[2]);
 					if(my_val <= 0 ) {
 						printf("Invalid input for history\n");
 						return -1;
@@ -616,9 +667,9 @@ int runCommand(TokenArr my_tokens) {
 					}
 				}
 			}
-			else if(my_tokens.token_count == 2) {
+			else if(my_tokens->token_count == 2) {
 				int my_val;
-				my_val = atoi(my_tokens.tokens[1]);
+				my_val = atoi(my_tokens->tokens[1]);
 				if(my_val <=0 || my_val > histSize) {
 					printf("Invalid input for history\n");
 					return -1;
