@@ -105,9 +105,11 @@ void parseInputs(char* input_buffer, int* input_size) {
 void substituteShellVars(TokenArr my_tokens) {
 	char* my_var;
 	for(int i = 0;i< my_tokens.token_count;i++) {
-		if(my_tokens.tokens[i][0] == '$') {
-			my_var = &my_tokens.tokens[i][1];
-			my_var = getShellVar(my_var);
+		if(my_tokens.tokens[i][0] == '$') { // If token is a var
+			my_var = &my_tokens.tokens[i][1]; // Retrieve str without the $
+			my_var = getShellVar(my_var); // Get the vars value
+
+			// Replacing the token with the var's value
 			free(my_tokens.tokens[i]);
 			my_tokens.tokens[i] = malloc(strlen(my_var) + 1);
 			if(my_tokens.tokens[i] == NULL) {
@@ -139,10 +141,8 @@ void interactiveMode() {
 			my_tokens = tokenizeString(user_input, *input_size); // Tokenize input
 			substituteShellVars(my_tokens);
 			runCommand(my_tokens);
-			for(int i =0; i < my_tokens.token_count;i++) {
-				free(my_tokens.tokens[i]);
-			}
-			free(my_tokens.tokens);
+
+			// INTENTIONALLY LEAKING MEM
 		}
 	}
 	wshExit();
@@ -233,6 +233,10 @@ int checkBuiltIn(char* my_command) {
 	return -1;
 }
 
+/**
+* Retrieves the variable value associated with the variable name.
+* If the variable is not found then return empty string
+**/
 char* getShellVar(char* var_name) {
 	struct ShellVar* my_var;
 	my_var = shellLinkedListHead;
@@ -344,6 +348,7 @@ int addHistEntry(TokenArr my_tokens) {
 			printf("%s\n", error_message);
 			exit(-1);
 		}
+		histHead->entry_tokens = my_tokens;
 		histHead->next_entry = NULL;
 		histHead->prev_entry = NULL;
 		histSize++;
@@ -359,6 +364,7 @@ int addHistEntry(TokenArr my_tokens) {
 			printf("%s\n", error_message);
 			return -1;
 		}
+		command_ptr->entry_tokens = my_tokens;
 		command_ptr->next_entry = histHead;
 		histHead->prev_entry = command_ptr;
 		command_ptr->prev_entry = NULL;
@@ -374,12 +380,14 @@ int addHistEntry(TokenArr my_tokens) {
 }
 
 void wshGetHist() {
-	printf("TOKENS: %s\n", histHead->entry_tokens.tokens[0]);
 	struct HistEntry* hist_ptr = histHead;
 	for(int i = 0; i < histSize; i++) {
-		printf("%d) ", i - 1);
+		printf("%d) ", i + 1);
 		for(int j = 0;j < hist_ptr->entry_tokens.token_count;j++) {
-			printf("%s ", hist_ptr->entry_tokens.tokens[j]);
+			printf("%s", hist_ptr->entry_tokens.tokens[j]);
+			if(j != hist_ptr->entry_tokens.token_count -1 ) { // Only print space if not last token
+				printf(" ");
+			}
 		}
 		printf("\n");
 		hist_ptr = hist_ptr->next_entry;
@@ -562,7 +570,6 @@ int runCommand(TokenArr my_tokens) {
 			break;
 
 		case 4:
-			printf("Running Local\n");
 			if(my_tokens.token_count !=2) {
 				printf("Invalid input for local\n");
 				return -1;
