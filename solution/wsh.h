@@ -179,4 +179,16 @@ char* getPath(TokenArr* my_tokens);
 **/
 TokenArr* tokenizeString(char* my_str);
 
+/**
+* Returns the symbol(s) associated with the redirect token
+* NULL if no redirect is done
+**/
+char* getRedirect(char* my_token);
+
+/**
+* Performs the given redirect action
+**/
+int performRedirect(char* my_redirect, char* my_token);
+
+
 

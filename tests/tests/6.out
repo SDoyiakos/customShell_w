@@ -1,0 +1,8 @@
+Makefile
+dup2.txt
+dup3.txt
+script.wsh
+script.wsh~
+wsh
+wsh.c
+wsh.h

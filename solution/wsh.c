@@ -6,29 +6,20 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <fcntl.h>
 #include "wsh.h"
 
 // Global vars
 extern char** environ;
 struct ShellVar* shellLinkedListHead = NULL;
 struct ShellVar* shellLinkedListTail = NULL;
+int exit_global = 0;
 
 // History globals
 struct HistEntry* histHead;
 struct HistEntry* histTail;
 int histLimit = 5;
 int histSize = 0;
-
-
-/**
- *Test function merely for me to see if tokens are being grabbed properly
- **/
-void debugTokens(TokenArr* my_tokens) {
-  printf("The tokens in the arr are:\n");
-  for(int i = 0;i < my_tokens->token_count;i++) {
-    printf("%s\n", my_tokens->tokens[i]);
-  }
-}
 
 TokenArr* tokenizeString(char* my_str) {
 	char error_message[] = "Error tokenizing string";
@@ -40,8 +31,6 @@ TokenArr* tokenizeString(char* my_str) {
 	}
 	
 	my_tokens->token_count = 0;
-	
-
 	token_arr_size = 10; // Start with array of limit
 	my_tokens->tokens = malloc(token_arr_size * sizeof(char*));
 	if(my_tokens->tokens == NULL) {
@@ -64,13 +53,11 @@ TokenArr* tokenizeString(char* my_str) {
 		}
 		my_tokens->tokens[my_tokens->token_count] = strdup(next_token);
 		my_tokens->token_count++;
-		
 		next_token = strtok(NULL, " ");
 		
 	}
 
 	my_tokens->tokens[my_tokens->token_count] = NULL; // Use for terminating as args
-	
 	return my_tokens;	
 }
 
@@ -118,19 +105,24 @@ int substituteShellVars(TokenArr* my_tokens) {
 }
 
 void programLoop(FILE* input_stream) {
+	int error_flag = 0;
 	TokenArr* my_tokens;
 	char* user_input = malloc(SHELL_MAX_INPUT * sizeof(char));
 	int* input_size = malloc(sizeof(int));
 
 	// Run loop until exit
 	while(1) {
+	if(error_flag != 0) {
+		exit_global = error_flag;
+	}
 		if(input_stream == stdin) {
 			printf("wsh> ");
 			fflush(stdout);
 		}	
 		
-		parseInputs(user_input, input_size, input_stream);	
+		error_flag = parseInputs(user_input, input_size, input_stream);	
 		my_tokens = NULL;
+		
 		// Check for EOF after getting input
 		if(feof(input_stream)) {
 			wshExit();
@@ -140,7 +132,7 @@ void programLoop(FILE* input_stream) {
 			my_tokens = tokenizeString(user_input); // Tokenize input
 			if(my_tokens->tokens[0][0] != '#') {				
 				substituteShellVars(my_tokens);
-				runCommand(my_tokens);
+				error_flag = runCommand(my_tokens);
 			}
 			freeTokenArr(my_tokens);
 		}
@@ -366,10 +358,106 @@ char* getPath(TokenArr* my_tokens) {
 	
 }
 
+char* getRedirect(char* my_token) {
+	if(strstr(my_token, "&>>") != NULL) {
+		return "&>>";
+	}
+	else if (strstr(my_token, "&>") != NULL) {
+		return "&>>";
+	}
+	else if(strstr(my_token, ">>") != NULL) {
+		return ">>";
+	}
+	else if(strstr(my_token, ">") != NULL) {
+		return ">";
+	}
+	else if(strstr(my_token, "<") != NULL) {
+		return "<";
+	}
+	else {
+		return NULL;
+	}
+}
+
+int inputRedirect(char* lhs, char* rhs) {
+	int lhs_file ;
+
+	// Default is stdin
+	if(strcmp(lhs,"") == 0) {
+		lhs_file = 0;
+	}
+	else {
+		lhs_file = atoi(lhs);
+	}
+	
+	int rhs_file = open(rhs, O_RDONLY);
+	if(lhs_file == -1) {
+		return -1;
+	}
+	
+	if(rhs_file == -1) {
+		return -1;
+	}
+	return dup2(rhs_file, lhs_file);
+}
+
+int outputRedirect(char* lhs, char* rhs) {
+	int lhs_file = atoi(lhs);
+	int rhs_file = open(rhs, O_WRONLY | O_TRUNC );
+	if(lhs_file == -1) {
+		return -1;
+	}
+	if(rhs_file == -1) {
+		return -1;
+	}
+	return dup2(rhs_file, lhs_file);
+}
+
+int performRedirect(char* my_redirect, char* my_token) {
+	char* lhs;
+	char* rhs;
+	char* token_copy;
+	token_copy = strdup(my_token);
+
+	// Two token redirections
+	if(strcmp(my_redirect, "<") == 0 || strcmp(my_redirect, ">") == 0 || strcmp(my_redirect, ">>") == 0) {
+		if(token_copy[0] == '>') {
+			lhs = "1";
+			rhs = strtok(my_token, my_redirect);
+		}
+		else if(token_copy[0] == '<') {
+			lhs = "0";
+			rhs = strtok(my_token, my_redirect);
+		}
+		else {
+			lhs = strtok(token_copy, my_redirect);
+			rhs = strtok(NULL, my_redirect);
+		}
+		
+		
+		printf("LHS: %s\nRHS: %s\n", lhs, rhs);
+		if(lhs == NULL || rhs == NULL) {
+			return -1;
+		}
+		if(strcmp(my_redirect,"<") == 0) {
+			return inputRedirect(lhs,rhs);
+		}
+		else if(strcmp(my_redirect, ">") == 0) {
+			return outputRedirect(lhs, rhs);
+		}
+	} 
+	return -1;
+
+	
+}
+
 int runCommand(TokenArr* my_tokens) {
 	char* my_command = my_tokens->tokens[0];
 	char* path_val;
+	char* redirect_val;
 	int fork_val;
+
+	redirect_val = getRedirect(my_tokens->tokens[my_tokens->token_count - 1]);
 	switch(checkBuiltIn(my_command)) {
 
 		// Non built in command
@@ -396,6 +484,15 @@ int runCommand(TokenArr* my_tokens) {
 			
 			 // Child
 			else if(fork_val == 0) {
+				if(redirect_val != NULL) {
+					int dup_val;
+					dup_val = performRedirect(redirect_val, my_tokens->tokens[my_tokens->token_count - 1]);
+					if(dup_val == -1) {
+						return -1;
+					}
+					free(my_tokens->tokens[my_tokens->token_count -1]);
+					my_tokens->tokens[my_tokens->token_count -1] = NULL;
+				}
 				return execve(path_val, my_tokens->tokens, environ);
 			}
 
@@ -658,7 +755,7 @@ int wshVars() {
 }
 
 void wshExit() {
-	exit(0);
+	exit(exit_global);
 }
 
 int wshLs() {
