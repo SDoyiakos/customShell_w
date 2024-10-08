@@ -42,12 +42,12 @@ const char* COMMAND_ARR[] =
 // BUILT IN FUNCTIONS
 void wshExit();
 int wshLs();
-void wshCd(char* new_dir);
-void wshExport(char* var_name, char* var_val);
-void wshLocal(char* var_name, char* var_val);
-void wshVars();
-void wshGetHist();
-void wshSetHist(int new_size);
+int wshCd(char* new_dir);
+int wshExport(char* var_name, char* var_val);
+int wshLocal(char* var_name, char* var_val);
+int wshVars();
+int wshGetHist();
+int wshSetHist(int new_size);
 
 
 // Internal shell functions
