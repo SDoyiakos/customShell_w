@@ -30,10 +30,6 @@ void debugTokens(TokenArr* my_tokens) {
   }
 }
 
-/**
-* Separates the input across token '='.
-* Returns a TokenArr of the inputs
-**/
 TokenArr* tokenizeString(char* my_str) {
 	char error_message[] = "Error tokenizing string";
 	char* next_token;
@@ -50,7 +46,7 @@ TokenArr* tokenizeString(char* my_str) {
 	my_tokens->tokens = malloc(token_arr_size * sizeof(char*));
 	if(my_tokens->tokens == NULL) {
 		printf("%s\n", error_message);
-		exit(-1);
+		return NULL;
 	}
 	
 	next_token = strtok(my_str, " ");
@@ -61,8 +57,8 @@ TokenArr* tokenizeString(char* my_str) {
 			char* alloc_ret = NULL;
 			alloc_ret = realloc(my_tokens->tokens, (token_arr_size * sizeof(char*)) + sizeof(char*));
 			if(alloc_ret == NULL) {
-				printf("Error tokenizing string\n");
-				exit(-1);
+				fprintf(stderr, "%s\n", error_message);
+				return NULL;
 			}
 			token_arr_size++;
 		}
@@ -78,8 +74,7 @@ TokenArr* tokenizeString(char* my_str) {
 	return my_tokens;	
 }
 
-void parseInputs(char* input_buffer, int* input_size, FILE* input_stream) {
-	
+int parseInputs(char* input_buffer, int* input_size, FILE* input_stream) {	
 	size_t buffer_len = SHELL_MAX_INPUT; // The size of the buffer
 	
 	// Getting next user input
@@ -89,8 +84,8 @@ void parseInputs(char* input_buffer, int* input_size, FILE* input_stream) {
 	if(*input_size == -1) {
 		// The two errno flags that can be set on a bad read
 		if(errno == EINVAL || errno == ENOMEM) {
-			printf("Error reading new line\nExiting\n");
-			exit(-1);
+			fprintf(stderr, "Error reading new line\nExiting\n");
+			return -1;
 		}
 	}
 
@@ -99,9 +94,10 @@ void parseInputs(char* input_buffer, int* input_size, FILE* input_stream) {
 		input_buffer[*input_size - 1] = '\0';
 		(*input_size)--;
 	}
+	return 0;
 }
 
-void substituteShellVars(TokenArr* my_tokens) {
+int substituteShellVars(TokenArr* my_tokens) {
 	char* my_var;
 	for(int i = 0;i< my_tokens->token_count;i++) {
 		if(my_tokens->tokens[i][0] == '$') { // If token is a var
@@ -113,14 +109,15 @@ void substituteShellVars(TokenArr* my_tokens) {
 			my_tokens->tokens[i] = malloc(strlen(my_var) + 1);
 			if(my_tokens->tokens[i] == NULL) {
 				printf("Malloc error\n");
-				exit(-1);
+				return -1;
 			}
 			strcpy(my_tokens->tokens[i], my_var);
 		}
 	}
+	return 0;
 }
 
-void interactiveMode(FILE* input_stream) {
+void programLoop(FILE* input_stream) {
 	TokenArr* my_tokens;
 	char* user_input = malloc(SHELL_MAX_INPUT * sizeof(char));
 	int* input_size = malloc(sizeof(int));
@@ -151,85 +148,6 @@ void interactiveMode(FILE* input_stream) {
 	wshExit();
 }
 
-/**
-* Shell built in exit function
-* Calls exit(0) syscall
-**/
-void wshExit() {
-	exit(0);
-}
-
-/**
-* Shell built in ls function
-* Performs like bash's ls -1
-**/
-int wshLs() {
-	int dir_ret;
-	struct dirent** my_dirent;
-	// Read until null
-	dir_ret = scandir(".", &my_dirent, 0, alphasort);
-	if(dir_ret == -1) { // Error case
-		return -1;
-	}
-	for(int i = 0;i < dir_ret; i++) {
-		if(my_dirent[i]->d_name[0] != '.') {
-			printf("%s", my_dirent[i]->d_name);
-			if(my_dirent[i]->d_type == DT_DIR) {
-				printf("/");
-			}
-			printf("\n");
-		}
-	}
-	return 0;
-}
-
-/**
-*	Shell change directory command.
-*	Takes param to new dir 
-**/
-int wshCd(char* new_dir){
-	if(chdir(new_dir) != 0) {
-		printf("Error, could not cd to directory %s\n", new_dir);
-		return -1;
-	}
-	return 0;
-}
-
-/**
-* Sets environment variable var_name=var_val
-**/
-int wshExport(char* var_name, char* var_val) {
-	int ret_val;
-	ret_val = setenv(var_name, var_val, 1); // Change and overwriting
-
-	if(ret_val == -1) {
-		printf("Error setting environment variable\n");
-		return -1;
-	}
-	return 0;
-	
-}
-
-/**
-* Prints all shell vars
-**/
-int wshVars() {
-	struct ShellVar* var_ptr;
-	var_ptr = shellLinkedListHead;
-
-	// Read until var is null
-	while(var_ptr != NULL) {
-		printf("%s=%s\n",var_ptr->var_name, var_ptr->var_val);
-		var_ptr = var_ptr->next_var;
-	}
-	
-	return 0;
-}
-
-/**
-* Gets the index of a built in command in the COMMAND_ARR
-* Returns -1 if command isnt built in
-**/
 int checkBuiltIn(char* my_command) {
 	int commands_size = (sizeof(COMMAND_ARR)/sizeof(char*));
 	for(int i = 0; i < commands_size;i++) {
@@ -240,10 +158,6 @@ int checkBuiltIn(char* my_command) {
 	return -1;
 }
 
-/**
-* Retrieves the variable value associated with the variable name.
-* If the variable is not found then return empty string
-**/
 char* getShellVar(char* var_name) {
 	struct ShellVar* my_var;
 	my_var = shellLinkedListHead;
@@ -256,9 +170,6 @@ char* getShellVar(char* var_name) {
 	return "";
 }
 
-/**
-* Gets the index of a shell variable
-**/
 int findShellVar(char* var_name) {
 	int index = 0;
 	struct ShellVar* var_ptr = shellLinkedListHead;
@@ -276,69 +187,6 @@ int findShellVar(char* var_name) {
 	return -1; // Var not found
 }
 
-/**
-* Built in wsh command. Adds the variable to the
-* local vars array. Updates value instead if already found in local vars array
-**/
-int wshLocal(char* var_name, char* var_val) {
-	char error_message[] = "Error adding shell var";
-	struct ShellVar* shell_var_ptr;
-	int var_loc;
-	var_loc = findShellVar(var_name);
-
-	if(var_val == NULL) {
-		var_val = "";
-	}
-	
-	// If the linked list is empty/has no entries
-	if(shellLinkedListHead == NULL) {
-
-		// Allocating head and tail
-		shellLinkedListHead = malloc(sizeof(struct ShellVar));
-		if(shellLinkedListHead == NULL) {
-			fprintf(stderr, "%s\n", error_message);
-			return -1;
-		}
-		shellLinkedListTail = shellLinkedListHead;
-		shellLinkedListHead->next_var = NULL;
-		shell_var_ptr = shellLinkedListHead; // New ptr is to head
-	}
-
-	// If var is in the Linked List
-	else if(var_loc != -1) {
-		shell_var_ptr = shellLinkedListHead;
-		for(int i = 0;i < var_loc;i++) {
-			shell_var_ptr = shell_var_ptr->next_var;
-		}
-	}
-	// If there is a head to the Linked List
-	else {
-	
-		shell_var_ptr = shellLinkedListTail;
-		
-		// Allocate next ShellVar in linked list
-		shell_var_ptr->next_var = malloc(sizeof(struct ShellVar));
-		if(shell_var_ptr == NULL) {
-			fprintf(stderr, "%s\n", error_message);
-			return -1;
-		}
-
-		shell_var_ptr = shell_var_ptr->next_var; // Point to new var
-		shell_var_ptr->next_var = NULL; // Set new vars next var to null
-		shellLinkedListTail = shell_var_ptr; // Set new tail
-	}
-	
-	// Copy vals into new var
-	if(strcpy(shell_var_ptr->var_name, var_name) == NULL || strcpy(shell_var_ptr->var_val, var_val) == NULL) {
-		fprintf(stderr, "%s\n", error_message);
-		return -1;
-	}
-	return 0;	
-}
-
-/**
-* Takes in two TokenArrs and returns 0 if ne and 1 if equal
-**/
 int tokenCmp(TokenArr* arr1, TokenArr* arr2) {
 	if(arr1->token_count != arr2->token_count) {
 		return 0;
@@ -354,17 +202,23 @@ int tokenCmp(TokenArr* arr1, TokenArr* arr2) {
 TokenArr* copyTokenArr(TokenArr* my_tokens) {
 	char error_message[] = "Error copying token arr";
 	TokenArr* my_copy;
+
+	// Allocating copy
 	my_copy = malloc(sizeof(TokenArr));
 	if(my_copy == NULL) {
 		printf("%s\n", error_message);
 		return NULL;
 	}
 	my_copy->token_count = my_tokens->token_count;
+
+	// Allocating copy's tokens arr
 	my_copy->tokens = malloc( (my_copy->token_count + 1) * sizeof(char*));
 	if(my_copy->tokens == NULL) {
 		printf("%s\n", error_message);
 		return NULL;
 	}
+
+	// Copy values over
 	for(int i = 0;i < my_copy->token_count;i++) {
 		my_copy->tokens[i] = malloc(strlen(my_tokens->tokens[i]) + sizeof(char*));
 		if(my_copy->tokens[i] == NULL) {
@@ -373,7 +227,7 @@ TokenArr* copyTokenArr(TokenArr* my_tokens) {
 		}
 		strcpy(my_copy->tokens[i], my_tokens->tokens[i]);
 	}
-	my_copy->tokens[my_copy->token_count] = NULL;
+	my_copy->tokens[my_copy->token_count] = NULL; // Terminating null when used as args
 	return my_copy;
 }
 
@@ -391,12 +245,9 @@ int addHistEntry(TokenArr* my_tokens) {
 
 		// Create a copy of the tokens at head entry
 		histHead->entry_tokens = copyTokenArr(my_tokens);
-		
-		
 		histHead->next_entry = NULL;
 		histHead->prev_entry = NULL;
 		histSize++;
-	
 	}
 
 	// >= 1 Entry
@@ -422,22 +273,6 @@ int addHistEntry(TokenArr* my_tokens) {
 	return 0;
 }
 
-int wshGetHist() {
-	struct HistEntry* hist_ptr = histHead;
-	for(int i = 0; i < histSize; i++) {
-		printf("%d) ", i + 1);
-		for(int j = 0;j < hist_ptr->entry_tokens->token_count;j++) {
-			printf("%s", hist_ptr->entry_tokens->tokens[j]);
-			if(j != hist_ptr->entry_tokens->token_count -1 ) { // Only print space if not last token
-				printf(" ");
-			}
-		}
-		printf("\n");
-		hist_ptr = hist_ptr->next_entry;
-	}
-	return 0;
-}
-
 struct HistEntry* getHistEntry(int index) {
 	index = index-1;
 	struct HistEntry* ret_val;
@@ -448,27 +283,7 @@ struct HistEntry* getHistEntry(int index) {
 	return ret_val;
 }
 
-int wshSetHist(int new_limit) {
-
-	if(new_limit <= 0) {
-		fprintf(stderr, "Error setting history size to %d\n", new_limit);
-		return -1;
-	}
-
-	int size_diff;
-	histLimit = new_limit;
-
-	size_diff = histSize - histLimit;
-
-	while(size_diff > 0) {
-		removeHistEntry();
-		size_diff = histSize - histLimit;
-	}	
-	return 0;
-}
-
 void freeTokenArr(TokenArr* my_tokens) {
-
 	for(int i = 0;i < my_tokens->token_count;i++) {
 		free(my_tokens->tokens[i]);
 	}
@@ -485,9 +300,6 @@ void removeHistEntry() {
 	histSize--;
 }
 
-/**
-* Retrieves the path to a program, first full or relative and then $PATH
-**/
 char* getPath(TokenArr* my_tokens) {
 	char error_message[] = "Error getting path";
 	int acc_val;
@@ -559,17 +371,20 @@ int runCommand(TokenArr* my_tokens) {
 	char* path_val;
 	int fork_val;
 	switch(checkBuiltIn(my_command)) {
-		case -1: // Non built in command
+
+		// Non built in command
+		case -1: 
 	
 			path_val = getPath(my_tokens);
 			if(path_val == NULL) {
-				printf("Not a valid command\n");
+				fprintf(stderr, "Not a valid command\n");
 				return -1;
 			}
 
 			fork_val = fork();
 
-			if(fork_val > 0) { // Parent
+			// Parent
+			if(fork_val > 0) { 
 				addHistEntry(my_tokens);
 				wait(NULL);
 				if(path_val != NULL) {
@@ -578,16 +393,20 @@ int runCommand(TokenArr* my_tokens) {
 				return 0;
 				
 			}
-			else if(fork_val == 0) { // Child
+			
+			 // Child
+			else if(fork_val == 0) {
 				return execve(path_val, my_tokens->tokens, environ);
 			}
-			else { // ERROR
-				printf("Error executing in child\n");
+
+			// ERROR
+			else { 
+				fprintf(stderr, "Error executing in child\n");
 				return -1;
 			}
 			break;
 			
-		case 0: // exit
+		case EXIT: // exit
 
 			// Checking for zero flags or parameters
 			if(my_tokens->token_count > 1) {
@@ -599,7 +418,7 @@ int runCommand(TokenArr* my_tokens) {
 			}
 			break;
 			
-		case 1: // ls
+		case LS: // ls
 		
 			// Checking for zero flags or parameters
 			if(my_tokens->token_count > 1) {
@@ -610,7 +429,7 @@ int runCommand(TokenArr* my_tokens) {
 				return wshLs();
 			}
 			break;
-		case 2: // cd
+		case CD: // cd
 
 			// Checking for exactly one arg
 			if(my_tokens->token_count != 2) {
@@ -621,8 +440,9 @@ int runCommand(TokenArr* my_tokens) {
 				return wshCd(my_tokens->tokens[1]);
 			}
 			break;
-		case 3:
+		case EXPORT:
 
+			// Export always uses form export x=(y)
 			if(my_tokens->token_count != 2) {
 				fprintf(stderr, "Error, export should be used in the manner, export VAR=value\n");
 				return -1;
@@ -630,7 +450,7 @@ int runCommand(TokenArr* my_tokens) {
 			else {
 				char* var_name;
 				char* var_val;
-				var_name = strtok(my_tokens->tokens[1], "=");
+				var_name = strtok(my_tokens->tokens[1], "="); 
 				var_val = strtok(NULL, "=");
 
 				// If var_name or var_val is null
@@ -644,7 +464,9 @@ int runCommand(TokenArr* my_tokens) {
 			}
 			break;
 
-		case 4: // Local
+		case LOCAL: // Local
+
+			// Always uses form local x=(y)
 			if(my_tokens->token_count !=2) {
 				printf("Invalid input for local\n");
 				return -1;
@@ -655,11 +477,13 @@ int runCommand(TokenArr* my_tokens) {
 				char* var_val;
 				var_name = strtok(my_tokens->tokens[1], "=");
 				var_val = strtok(NULL, "=");
+
+				// If RHS is a variable
 				if(var_val != NULL && var_val[0] == '$') {
 					var_val = getShellVar(&var_val[1]);
 				}
 					
-				// If var_name or var_val is null
+				// If var_name is null or a variable reference
 				if(var_name == NULL || var_name[0] == '$') {
 						fprintf(stderr, "Error, export failed to assign shell var\n");
 						return -1;
@@ -670,23 +494,39 @@ int runCommand(TokenArr* my_tokens) {
 			}
 			break;
 		
-		case 5: // vars
-			wshVars();
+		case VARS: // vars
+
+			// Checking vars is run on its own
+			if(my_tokens->token_count != 1) {
+				fprintf(stderr, "Invalid user of vars\n");
+				return -1;
+			}
+			else {
+				return wshVars();
+			}
 			break;	
 
-		case 6: // history
+		case HISTORY: // history
+
+			// Prints list of previous commands
 			if(my_tokens->token_count == 1) {
 				return wshGetHist();
 			}
+
+			// Case where size is set
 			else if(my_tokens->token_count == 3) {
+
+				// Fail is second token isnt 'set'
 				if(strcmp(my_tokens->tokens[1],"set") !=0) {
 					fprintf(stderr, "Invalid input for history\n");
 					return -1;
 				}
-					else {
-					int my_val;
+				else {
+				int my_val;
 					my_val = atoi(my_tokens->tokens[2]);
-					if(my_val <= 0 ) {
+					
+					// History size cant be <=0 also handles atoi error
+					if(my_val <= 0 ) { 
 						fprintf(stderr, "Invalid input for history\n");
 						return -1;
 					}
@@ -698,6 +538,8 @@ int runCommand(TokenArr* my_tokens) {
 			else if(my_tokens->token_count == 2) {
 				int my_val;
 				my_val = atoi(my_tokens->tokens[1]);
+
+				// Check size is > 0 and atoi retval is good
 				if(my_val <=0 || my_val > histSize) {
 					fprintf(stderr, "Invalid input for history\n");
 					return -1;
@@ -711,22 +553,170 @@ int runCommand(TokenArr* my_tokens) {
 	return 0;
 }
 
+int wshLocal(char* var_name, char* var_val) {
+	char error_message[] = "Error adding shell var";
+	struct ShellVar* shell_var_ptr;
+	int var_loc;
+	var_loc = findShellVar(var_name);
+
+	if(var_val == NULL) {
+		var_val = "";
+	}
+	
+	// If the linked list is empty/has no entries
+	if(shellLinkedListHead == NULL) {
+
+		// Allocating head and tail
+		shellLinkedListHead = malloc(sizeof(struct ShellVar));
+		if(shellLinkedListHead == NULL) {
+			fprintf(stderr, "%s\n", error_message);
+			return -1;
+		}
+		shellLinkedListTail = shellLinkedListHead;
+		shellLinkedListHead->next_var = NULL;
+		shell_var_ptr = shellLinkedListHead; // New ptr is to head
+	}
+
+	// If var is in the Linked List
+	else if(var_loc != -1) {
+		shell_var_ptr = shellLinkedListHead;
+		for(int i = 0;i < var_loc;i++) {
+			shell_var_ptr = shell_var_ptr->next_var;
+		}
+	}
+	// If there is a head to the Linked List
+	else {
+	
+		shell_var_ptr = shellLinkedListTail;
+		
+		// Allocate next ShellVar in linked list
+		shell_var_ptr->next_var = malloc(sizeof(struct ShellVar));
+		if(shell_var_ptr == NULL) {
+			fprintf(stderr, "%s\n", error_message);
+			return -1;
+		}
+
+		shell_var_ptr = shell_var_ptr->next_var; // Point to new var
+		shell_var_ptr->next_var = NULL; // Set new vars next var to null
+		shellLinkedListTail = shell_var_ptr; // Set new tail
+	}
+	
+	// Copy vals into new var
+	if(strcpy(shell_var_ptr->var_name, var_name) == NULL || strcpy(shell_var_ptr->var_val, var_val) == NULL) {
+		fprintf(stderr, "%s\n", error_message);
+		return -1;
+	}
+	return 0;	
+}
+
+int wshSetHist(int new_limit) {
+
+	if(new_limit <= 0) {
+		fprintf(stderr, "Error setting history size to %d\n", new_limit);
+		return -1;
+	}
+
+	int size_diff;
+	histLimit = new_limit;
+
+	size_diff = histSize - histLimit;
+
+	while(size_diff > 0) {
+		removeHistEntry();
+		size_diff = histSize - histLimit;
+	}	
+	return 0;
+}
+
+int wshGetHist() {
+	struct HistEntry* hist_ptr = histHead;
+	for(int i = 0; i < histSize; i++) {
+		printf("%d) ", i + 1);
+		for(int j = 0;j < hist_ptr->entry_tokens->token_count;j++) {
+			printf("%s", hist_ptr->entry_tokens->tokens[j]);
+			if(j != hist_ptr->entry_tokens->token_count -1 ) { // Only print space if not last token
+				printf(" ");
+			}
+		}
+		printf("\n");
+		hist_ptr = hist_ptr->next_entry;
+	}
+	return 0;
+}
+
+int wshVars() {
+	struct ShellVar* var_ptr;
+	var_ptr = shellLinkedListHead;
+
+	// Read until var is null
+	while(var_ptr != NULL) {
+		printf("%s=%s\n",var_ptr->var_name, var_ptr->var_val);
+		var_ptr = var_ptr->next_var;
+	}
+	
+	return 0;
+}
+
+void wshExit() {
+	exit(0);
+}
+
+int wshLs() {
+	int dir_ret;
+	struct dirent** my_dirent;
+	// Read until null
+	dir_ret = scandir(".", &my_dirent, 0, alphasort);
+	if(dir_ret == -1) { // Error case
+		return -1;
+	}
+	for(int i = 0;i < dir_ret; i++) {
+		if(my_dirent[i]->d_name[0] != '.') {
+			printf("%s", my_dirent[i]->d_name);
+			if(my_dirent[i]->d_type == DT_DIR) {
+				printf("/");
+			}
+			printf("\n");
+		}
+	}
+	return 0;
+}
+
+int wshCd(char* new_dir){
+	if(chdir(new_dir) != 0) {
+		printf("Error, could not cd to directory %s\n", new_dir);
+		return -1;
+	}
+	return 0;
+}
+
+int wshExport(char* var_name, char* var_val) {
+	int ret_val;
+	ret_val = setenv(var_name, var_val, 1); // Change and overwriting
+
+	if(ret_val == -1) {
+		fprintf(stderr, "Error setting environment variable\n");
+		return -1;
+	}
+	return 0;
+	
+}
+
 int main(int argc, char* argv[]) {
 	FILE* sh_file;
 	wshExport("PATH", "/bin");
 	if(argc == 1) {
-		interactiveMode(stdin);
+		programLoop(stdin);
 	}
 	else if(argc == 2) {
 		sh_file = fopen(argv[1], "r");
 		if(sh_file != NULL) {
-			interactiveMode(sh_file);
+			programLoop(sh_file);
 		}
 		else {
-			printf("Error running shell file\n");
+			fprintf(stderr, "Error running shell file\n");
 		}
 	}
 	else {
-		printf("Wsh can only be run with 0 or 1 params\n");
+		fprintf(stderr, "Wsh can only be run with 0 or 1 params\n");
 	}
 }
