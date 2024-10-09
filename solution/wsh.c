@@ -339,10 +339,12 @@ char* getPath(TokenArr* my_tokens) {
 		path_str = malloc(sizeof(char) * MAX_DIR_SIZE);
 		if(path_str == NULL) {
 			fprintf(stderr, "%s\n", error_message);
+			free(command_cpy);
 			return NULL;
 		}
 		if(strcpy(path_str, getenv("PATH")) == NULL) {
 			fprintf(stderr, "%s\n", error_message);
+			free(command_cpy);
 			return NULL;
 		}
 
@@ -350,6 +352,7 @@ char* getPath(TokenArr* my_tokens) {
 		full_dir_ptr = malloc(sizeof(char) * MAX_DIR_SIZE);
 		if(full_dir_ptr == NULL) {
 			fprintf(stderr, "%s\n", error_message);
+			free(command_cpy);
 			return NULL;
 		}
 
@@ -370,7 +373,6 @@ char* getPath(TokenArr* my_tokens) {
 				free(command_cpy);
 				return full_dir_ptr;
 			}
-
 			path_ptr = strtok(NULL, ":"); // Get new path
 			strcpy(command_cpy, my_tokens->tokens[0]);
 			
@@ -885,6 +887,12 @@ int wshLs() {
 			printf("\n");
 		}
 	}
+	
+	while(dir_ret--) {
+		free(my_dirent[dir_ret]);
+	}
+	free(my_dirent);
+	
 	return 0;
 }
 
