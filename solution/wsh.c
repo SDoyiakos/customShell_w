@@ -578,8 +578,9 @@ int runCommand(TokenArr* my_tokens) {
 	char* my_command = my_tokens->tokens[0];
 	char* path_val;
 	int fork_val;
+	int built_in_val = checkBuiltIn(my_command);
 	
-	switch(checkBuiltIn(my_command)) {
+	switch(built_in_val) {
 
 		// Non built in command
 		case -1: 
@@ -649,60 +650,43 @@ int runCommand(TokenArr* my_tokens) {
 				return wshCd(my_tokens->tokens[1]);
 			}
 			break;
-		case EXPORT:
-
-			// Export always uses form export x=(y)
-			if(my_tokens->token_count != 2) {
-				fprintf(stderr, "Error, export should be used in the manner, export VAR=value\n");
-				return -1;
-			}
-			else {
-				char* var_name;
-				char* var_val;
-				var_name = strtok(my_tokens->tokens[1], "="); 
-				var_val = strtok(NULL, "=");
-
-				// If var_name or var_val is null
-				if(var_name == NULL || var_val == NULL) {
-					printf("Error, export failed to assign environ var\n");
-					return -1;
-				}
-				else {
-					wshExport(var_name, var_val);
-				}
-			}
-			break;
-
-		case LOCAL: // Local
-
-			// Always uses form local x=(y)
-			if(my_tokens->token_count !=2) {
-				printf("Invalid input for local\n");
-				return -1;
-			}
-			else {
 			
-				char* var_name;
-				char* var_val;
-				var_name = strtok(my_tokens->tokens[1], "=");
-				var_val = strtok(NULL, "=");
+		case EXPORT:
+		case LOCAL: 
 
-				// If RHS is a variable
-				if(var_val != NULL && var_val[0] == '$') {
-					var_val = getShellVar(&var_val[1]);
-				}
-					
-				// If var_name is null or a variable reference
-				if(var_name == NULL || var_name[0] == '$') {
-						fprintf(stderr, "Error, export failed to assign shell var\n");
-						return -1;
-				}
-				else {
-					return wshLocal(var_name, var_val);
-				}
+			// Always uses form export/local x=(y)
+			if(my_tokens->token_count != 2) {
+				fprintf(stderr, "Error, command should be of form export/local VAR=value\n");
+				return -1;
 			}
-			break;
+			if(my_tokens->tokens[1][0] == '=') {
+				fprintf(stderr, "Error, can't have empy lhs in var assignment\n");
+			}
 		
+			char* var_name;
+			char* var_val;
+			var_name = strtok(my_tokens->tokens[1], "="); 
+			var_val = strtok(NULL, "=");
+			
+			// Check for strtok error
+			if(var_name == NULL) {
+				fprintf(stderr, "Error, Failed to assign var\n");
+				return -1;
+			}
+
+			// Replace empty rhs with empty str
+			if(var_val == NULL) {
+				var_val = "";
+			}
+
+			if(built_in_val == LOCAL) {
+				return wshLocal(var_name, var_val);
+			}	
+			else {
+				return wshExport(var_name, var_val);
+			}
+			break;	
+				
 		case VARS: // vars
 
 			// Checking vars is run on its own
@@ -767,10 +751,6 @@ int wshLocal(char* var_name, char* var_val) {
 	struct ShellVar* shell_var_ptr;
 	int var_loc;
 	var_loc = findShellVar(var_name);
-
-	if(var_val == NULL) {
-		var_val = "";
-	}
 	
 	// If the linked list is empty/has no entries
 	if(shellLinkedListHead == NULL) {
