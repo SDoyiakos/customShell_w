@@ -376,6 +376,7 @@ char* getPath(TokenArr* my_tokens) {
 			strcpy(command_cpy, my_tokens->tokens[0]);
 			
 		}
+		free(full_dir_ptr);
 		free(path_str);
 		free(command_cpy);
 		return NULL; // No path found
