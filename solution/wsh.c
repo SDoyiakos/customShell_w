@@ -21,6 +21,12 @@ struct HistEntry* histTail;
 int histLimit = 5;
 int histSize = 0;
 
+// Globals to restore redirects
+int original_desc = -1;
+int new_desc = -1;
+int second_original_desc = -1;
+int second_new_desc = -1;
+
 TokenArr* tokenizeString(char* my_str) {
 	char error_message[] = "Error tokenizing string";
 	char* next_token;
@@ -109,6 +115,7 @@ void programLoop(FILE* input_stream) {
 	TokenArr* my_tokens;
 	char* user_input = malloc(SHELL_MAX_INPUT * sizeof(char));
 	int* input_size = malloc(sizeof(int));
+	char* redirect_val = NULL;
 
 	// Run loop until exit
 	while(1) {
@@ -132,7 +139,18 @@ void programLoop(FILE* input_stream) {
 			my_tokens = tokenizeString(user_input); // Tokenize input
 			if(my_tokens->tokens[0][0] != '#') {				
 				substituteShellVars(my_tokens);
+				
+				// Check for redirect
+				redirect_val = getRedirect(my_tokens->tokens[my_tokens->token_count - 1]);
+				if(redirect_val != NULL) {
+					int dup_val;
+					dup_val = performRedirect(redirect_val, my_tokens->tokens[my_tokens->token_count - 1]);
+					free(my_tokens->tokens[my_tokens->token_count -1]);
+					my_tokens->tokens[my_tokens->token_count -1] = NULL;
+					my_tokens->token_count--;
+				}
 				error_flag = runCommand(my_tokens);
+				restoreFileDescs();
 			}
 			freeTokenArr(my_tokens);
 		}
@@ -363,7 +381,7 @@ char* getRedirect(char* my_token) {
 		return "&>>";
 	}
 	else if (strstr(my_token, "&>") != NULL) {
-		return "&>>";
+		return "&>";
 	}
 	else if(strstr(my_token, ">>") != NULL) {
 		return ">>";
@@ -379,38 +397,109 @@ char* getRedirect(char* my_token) {
 	}
 }
 
-int inputRedirect(char* lhs, char* rhs) {
-	int lhs_file ;
+int outputAppend(char* lhs, char* rhs) {
+	int lhs_file = atoi(lhs);
+	int rhs_file = open(rhs, O_WRONLY | O_CREAT | O_APPEND, 
+	S_IRUSR | S_IWUSR | S_IWGRP | S_IRGRP );
 
-	// Default is stdin
-	if(strcmp(lhs,"") == 0) {
-		lhs_file = 0;
-	}
-	else {
-		lhs_file = atoi(lhs);
-	}
-	
-	int rhs_file = open(rhs, O_RDONLY);
-	if(lhs_file == -1) {
+	// Error checking
+	if(lhs_file < 0 || rhs_file == -1) {
 		return -1;
 	}
-	
-	if(rhs_file == -1) {
+
+	original_desc = lhs_file;
+	new_desc = dup(original_desc);
+	return dup2(rhs_file, lhs_file);	
+}
+
+int inputRedirect(char* lhs, char* rhs) {
+	int lhs_file = atoi(lhs);
+	int rhs_file = open(rhs, O_RDONLY);	
+
+	if(rhs_file == -1 || lhs_file < 0) {
 		return -1;
 	}
+	original_desc = lhs_file;
+	new_desc = dup(original_desc);
 	return dup2(rhs_file, lhs_file);
 }
 
 int outputRedirect(char* lhs, char* rhs) {
 	int lhs_file = atoi(lhs);
-	int rhs_file = open(rhs, O_WRONLY | O_TRUNC );
-	if(lhs_file == -1) {
+	int rhs_file = open(rhs, O_WRONLY | O_TRUNC | O_CREAT,
+	 S_IRUSR | S_IWUSR | S_IWGRP | S_IRGRP );
+
+	// Error checking
+	if(lhs_file < 0 || rhs_file == -1) {
 		return -1;
 	}
+
+	original_desc = lhs_file;
+	new_desc = dup(original_desc);
+	return dup2(rhs_file, lhs_file);
+}
+
+int outputErrRedirect(char* rhs) {
+	int ret_val;
+	int rhs_file = open(rhs, O_WRONLY| O_TRUNC | O_CREAT,
+		 S_IRUSR | S_IWUSR | S_IWGRP | S_IRGRP );
+
 	if(rhs_file == -1) {
 		return -1;
 	}
-	return dup2(rhs_file, lhs_file);
+
+	original_desc = 1;
+	new_desc = dup(original_desc);
+	ret_val = dup2(rhs_file, 1);
+	if(ret_val == -1) {
+		return -1;
+	}
+
+	second_original_desc = 2;
+	second_new_desc = dup(second_original_desc);
+	ret_val = dup2(rhs_file, 2);
+	if(ret_val == -1) {
+		return -1;
+	}
+	return 0;	 
+}
+
+int outputErrAppend(char* rhs) {
+	int ret_val;
+		int rhs_file = open(rhs, O_WRONLY| O_APPEND | O_CREAT,
+			 S_IRUSR | S_IWUSR | S_IWGRP | S_IRGRP );
+	
+	if(rhs_file == -1) {
+		return -1;
+	}
+
+	original_desc = 1;
+	new_desc = dup(original_desc);
+	ret_val = dup2(rhs_file, 1);
+	if(ret_val == -1) {
+		return -1;
+	}
+
+	second_original_desc = 2;
+	second_new_desc = dup(second_original_desc);
+	ret_val = dup2(rhs_file, 2);
+	if(ret_val == -1) {
+		return -1;
+	}
+	return 0;	  
+}
+
+void restoreFileDescs() {
+	if(original_desc != -1 && new_desc != -1) {
+		dup2(new_desc, original_desc);
+		original_desc = -1;
+		new_desc = -1;
+	}
+	if(second_original_desc != -1 && second_new_desc != -1) {
+		dup2(second_new_desc, second_original_desc);
+		second_original_desc = -1;
+		second_new_desc = -1;
+	}
 }
 
 int performRedirect(char* my_redirect, char* my_token) {
@@ -423,27 +512,48 @@ int performRedirect(char* my_redirect, char* my_token) {
 	if(strcmp(my_redirect, "<") == 0 || strcmp(my_redirect, ">") == 0 || strcmp(my_redirect, ">>") == 0) {
 		if(token_copy[0] == '>') {
 			lhs = "1";
-			rhs = strtok(my_token, my_redirect);
+			rhs = strtok(token_copy, my_redirect);
 		}
 		else if(token_copy[0] == '<') {
 			lhs = "0";
-			rhs = strtok(my_token, my_redirect);
+			rhs = strtok(token_copy, my_redirect);
 		}
 		else {
 			lhs = strtok(token_copy, my_redirect);
 			rhs = strtok(NULL, my_redirect);
 		}
-		
-		
-		printf("LHS: %s\nRHS: %s\n", lhs, rhs);
+			
+		//printf("LHS: %s\nRHS: %s\n", lhs, rhs);
 		if(lhs == NULL || rhs == NULL) {
 			return -1;
 		}
+
+		// Checking different redirs
 		if(strcmp(my_redirect,"<") == 0) {
 			return inputRedirect(lhs,rhs);
 		}
 		else if(strcmp(my_redirect, ">") == 0) {
 			return outputRedirect(lhs, rhs);
+		}
+		else {
+			return outputAppend(lhs, rhs);
+		}
+	} 
+
+	// One token redirection
+	else if(strcmp(my_redirect, "&>") == 0 || strcmp(my_redirect, "&>>") == 0) {
+		if(token_copy[0] != '&') {
+			return -1;
+		}
+		rhs = strtok(token_copy, my_redirect);
+		if(rhs == NULL) {
+			return -1;
+		}
+		if(strcmp(my_redirect, "&>") == 0) {
+			return outputErrRedirect(rhs);
+		}
+		else {
+			return outputErrAppend(rhs);
 		}
 	} 
 	return -1;
@@ -456,8 +566,7 @@ int runCommand(TokenArr* my_tokens) {
 	char* path_val;
 	char* redirect_val;
 	int fork_val;
-
-	redirect_val = getRedirect(my_tokens->tokens[my_tokens->token_count - 1]);
+	
 	switch(checkBuiltIn(my_command)) {
 
 		// Non built in command
@@ -484,15 +593,6 @@ int runCommand(TokenArr* my_tokens) {
 			
 			 // Child
 			else if(fork_val == 0) {
-				if(redirect_val != NULL) {
-					int dup_val;
-					dup_val = performRedirect(redirect_val, my_tokens->tokens[my_tokens->token_count - 1]);
-					if(dup_val == -1) {
-						return -1;
-					}
-					free(my_tokens->tokens[my_tokens->token_count -1]);
-					my_tokens->tokens[my_tokens->token_count -1] = NULL;
-				}
 				return execve(path_val, my_tokens->tokens, environ);
 			}
 

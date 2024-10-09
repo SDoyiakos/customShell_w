@@ -45,7 +45,7 @@ const char* COMMAND_ARR[] =
 
 /**
 * Shell built in exit function
-* Calls exit(0) syscall
+* Calls exit() syscall
 **/
 void wshExit();
 
@@ -190,5 +190,23 @@ char* getRedirect(char* my_token);
 **/
 int performRedirect(char* my_redirect, char* my_token);
 
+/**
+* Sets rhs for reading on the lhs file desc
+**/
+int inputRedirect(char* lhs, char* rhs);
 
+/**
+* Sets rhs for writing on lhs file desc
+**/
+int outputRedirect(char* lhs, char* rhs);
 
+/**
+* Set rhs for append writing on lhs file desc
+**/
+int outputAppend(char* lhs, char* rhs);
+
+int outputErrRedirect(char* rhs);
+
+int outputErrAppend(char* rhs);
+
+void restoreFileDescs();
