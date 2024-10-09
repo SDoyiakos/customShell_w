@@ -92,11 +92,17 @@ int parseInputs(char* input_buffer, int* input_size, FILE* input_stream) {
 
 int substituteShellVars(TokenArr* my_tokens) {
 	char* my_var;
+	char* shortened_input;
 	for(int i = 0;i< my_tokens->token_count;i++) {
 		if(my_tokens->tokens[i][0] == '$') { // If token is a var
-			my_var = &my_tokens->tokens[i][1]; // Retrieve str without the $
-			my_var = getShellVar(my_var); // Get the vars value
+			shortened_input = &my_tokens->tokens[i][1]; // Retrieve str without the $
+			// Get from env first
+			my_var = getenv(shortened_input);
 
+			// If varn not found in env
+			if(my_var == NULL) {
+				my_var = getShellVar(shortened_input); // Get the vars value
+			}
 			// Replacing the token with the var's value
 			free(my_tokens->tokens[i]);
 			my_tokens->tokens[i] = malloc(strlen(my_var) + 1);
@@ -503,6 +509,7 @@ void restoreFileDescs() {
 }
 
 int performRedirect(char* my_redirect, char* my_token) {
+	int ret_val = 0;
 	char* lhs;
 	char* rhs;
 	char* token_copy;
@@ -525,46 +532,49 @@ int performRedirect(char* my_redirect, char* my_token) {
 			
 		//printf("LHS: %s\nRHS: %s\n", lhs, rhs);
 		if(lhs == NULL || rhs == NULL) {
-			return -1;
+			ret_val = -1;
 		}
 
 		// Checking different redirs
-		if(strcmp(my_redirect,"<") == 0) {
-			return inputRedirect(lhs,rhs);
+		else if(strcmp(my_redirect,"<") == 0) {
+			ret_val = inputRedirect(lhs,rhs);
 		}
 		else if(strcmp(my_redirect, ">") == 0) {
-			return outputRedirect(lhs, rhs);
+			ret_val = outputRedirect(lhs, rhs);
 		}
 		else {
-			return outputAppend(lhs, rhs);
+			ret_val = outputAppend(lhs, rhs);
 		}
 	} 
 
 	// One token redirection
 	else if(strcmp(my_redirect, "&>") == 0 || strcmp(my_redirect, "&>>") == 0) {
+
+		// No tokens on LHS
 		if(token_copy[0] != '&') {
-			return -1;
-		}
-		rhs = strtok(token_copy, my_redirect);
-		if(rhs == NULL) {
-			return -1;
-		}
-		if(strcmp(my_redirect, "&>") == 0) {
-			return outputErrRedirect(rhs);
+			ret_val =  -1;
 		}
 		else {
-			return outputErrAppend(rhs);
+			
+			rhs = strtok(token_copy, my_redirect);	
+			if(rhs == NULL) { // Check for strtok error
+				ret_val = -1;		
+			}
+			else if(strcmp(my_redirect, "&>") == 0) {
+				ret_val = outputErrRedirect(rhs);
+			}
+			else {
+				ret_val =  outputErrAppend(rhs);
+			}
 		}
 	} 
-	return -1;
-
-	
+	free(token_copy);
+	return ret_val;
 }
 
 int runCommand(TokenArr* my_tokens) {
 	char* my_command = my_tokens->tokens[0];
 	char* path_val;
-	char* redirect_val;
 	int fork_val;
 	
 	switch(checkBuiltIn(my_command)) {
