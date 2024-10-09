@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -pedantic -std=gnu18
+CFLAGS = -Wall -Wextra -Werror -pedantic -std=gnu18
 LOGIN = doyiakos
 SUBMITPATH = ~cs537-1/handin/$(LOGIN)/p3/
 

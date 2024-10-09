@@ -149,8 +149,7 @@ void programLoop(FILE* input_stream) {
 				// Check for redirect
 				redirect_val = getRedirect(my_tokens->tokens[my_tokens->token_count - 1]);
 				if(redirect_val != NULL) {
-					int dup_val;
-					dup_val = performRedirect(redirect_val, my_tokens->tokens[my_tokens->token_count - 1]);
+					performRedirect(redirect_val, my_tokens->tokens[my_tokens->token_count - 1]);
 					free(my_tokens->tokens[my_tokens->token_count -1]);
 					my_tokens->tokens[my_tokens->token_count -1] = NULL;
 					my_tokens->token_count--;
