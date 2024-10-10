@@ -220,6 +220,12 @@ int outputErrAppend(char* rhs);
 **/
 void restoreFileDescs();
 
+/**
+*  Frees all entries in the history arr
+**/
 void freeHistory();
 
+/**
+* Frees all entries in the shell var arr
+**/
 void freeShellVars();
