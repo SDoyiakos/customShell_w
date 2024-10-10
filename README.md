@@ -67,3 +67,8 @@ The wsh runs in a sequential order of the following manner
 		- TokenArr is allocated with a tokens of size 10 and if all 10 arent used then that space is left allocated leading a bit of internal fragmentation
 		- TokenArr when growing beyond size 10 will have to do a realloc for each token which is costly
 
+[External Sources Used]
+	- Manpages for commands
+	- Stackoverflow was used to understand dup
+	- https://www.youtube.com/watch?v=EqndHT606Tw was used to help understand dup
+	- Higher level ideas such as flow of commands was influenced by the course Discord server
