@@ -111,7 +111,10 @@ int substituteShellVars(TokenArr* my_tokens) {
 				fprintf(stderr, "Malloc error\n");
 				return -1;
 			}
-			strcpy(my_tokens->tokens[i], my_var);
+			if(strcpy(my_tokens->tokens[i], my_var) == NULL) {
+				fprintf(stderr, "Substitute copy error\n");
+				return -1;
+			}
 		}
 	}
 	return 0;
@@ -144,12 +147,22 @@ void programLoop(FILE* input_stream) {
 		if(input_size != 0) {
 			my_tokens = tokenizeString(user_input); // Tokenize input
 			if(my_tokens->tokens[0][0] != '#') {				
-				substituteShellVars(my_tokens);
+				if(substituteShellVars(my_tokens) == -1) {
+					exit_global = -1;
+					freeTokenArr(my_tokens);
+					continue;
+				}
 				
 				// Check for redirect
 				redirect_val = getRedirect(my_tokens->tokens[my_tokens->token_count - 1]);
 				if(redirect_val != NULL) {
-					performRedirect(redirect_val, my_tokens->tokens[my_tokens->token_count - 1]);
+
+					// Last token not part of command
+					if(performRedirect(redirect_val, my_tokens->tokens[my_tokens->token_count - 1]) == -1) {
+						exit_global = -1;
+						freeTokenArr(my_tokens);
+						continue;
+					}
 					free(my_tokens->tokens[my_tokens->token_count -1]);
 					my_tokens->tokens[my_tokens->token_count -1] = NULL;
 					my_tokens->token_count--;
@@ -203,15 +216,19 @@ int findShellVar(char* var_name) {
 }
 
 int tokenCmp(TokenArr* arr1, TokenArr* arr2) {
+
+	// Compare they're same size
 	if(arr1->token_count != arr2->token_count) {
 		return 0;
 	}
+
+	// Compare each token
 	for(int i = 0; i < arr1->token_count;i++) {
 		if(strcmp(arr1->tokens[i],arr2->tokens[i]) != 0) {
 			return 0;
 		}
 	}
-	return 1;
+	return -1;
 }
 
 TokenArr* copyTokenArr(TokenArr* my_tokens) {
@@ -227,7 +244,7 @@ TokenArr* copyTokenArr(TokenArr* my_tokens) {
 	my_copy->token_count = my_tokens->token_count;
 
 	// Allocating copy's tokens arr
-	my_copy->tokens = malloc( (my_copy->token_count + 1) * sizeof(char*));
+	my_copy->tokens = malloc((my_copy->token_count + 1) * sizeof(char*));
 	if(my_copy->tokens == NULL) {
 		printf("%s\n", error_message);
 		return NULL;
@@ -240,7 +257,10 @@ TokenArr* copyTokenArr(TokenArr* my_tokens) {
 			printf("%s\n", error_message);
 			return NULL;
 		}
-		strcpy(my_copy->tokens[i], my_tokens->tokens[i]);
+		if(strcpy(my_copy->tokens[i], my_tokens->tokens[i]) == NULL)  {
+			printf("%s\n", error_message);
+			return NULL;
+		}
 	}
 	my_copy->tokens[my_copy->token_count] = NULL; // Terminating null when used as args
 	return my_copy;
@@ -346,7 +366,11 @@ char* getPath(TokenArr* my_tokens) {
 	if(command_cpy == NULL) {
 		return NULL;
 	}
-	strcpy(command_cpy, my_tokens->tokens[0]);
+
+	if(strcpy(command_cpy, my_tokens->tokens[0]) == NULL) {
+		fprintf(stderr, "%s\n", error_message);
+		return NULL;
+	}
 	
 	// Check if in wd
 	acc_val = access(command_cpy, X_OK);
@@ -364,6 +388,8 @@ char* getPath(TokenArr* my_tokens) {
 			free(command_cpy);
 			return NULL;
 		}
+
+		// Copy path var into path_str
 		if(strcpy(path_str, getenv("PATH")) == NULL) {
 			fprintf(stderr, "%s\n", error_message);
 			free(command_cpy);
@@ -438,6 +464,7 @@ int outputAppend(char* lhs, char* rhs) {
 		return -1;
 	}
 
+	// Redirect lhs to rhs
 	original_desc = lhs_file;
 	new_desc = dup(original_desc);
 	return dup2(rhs_file, lhs_file);	
@@ -447,9 +474,12 @@ int inputRedirect(char* lhs, char* rhs) {
 	int lhs_file = atoi(lhs);
 	int rhs_file = open(rhs, O_RDONLY);	
 
+	// Error checking
 	if(rhs_file == -1 || lhs_file < 0) {
 		return -1;
 	}
+
+	// Redirect rhs as input to lhs
 	original_desc = lhs_file;
 	new_desc = dup(original_desc);
 	return dup2(rhs_file, lhs_file);
@@ -465,6 +495,7 @@ int outputRedirect(char* lhs, char* rhs) {
 		return -1;
 	}
 
+	// Redirect lhs to rhs
 	original_desc = lhs_file;
 	new_desc = dup(original_desc);
 	return dup2(rhs_file, lhs_file);
@@ -479,6 +510,7 @@ int outputErrRedirect(char* rhs) {
 		return -1;
 	}
 
+	// Redirect stdout to rhs
 	original_desc = 1;
 	new_desc = dup(original_desc);
 	ret_val = dup2(rhs_file, 1);
@@ -486,6 +518,7 @@ int outputErrRedirect(char* rhs) {
 		return -1;
 	}
 
+	// Redirect stderr to rhs
 	second_original_desc = 2;
 	second_new_desc = dup(second_original_desc);
 	ret_val = dup2(rhs_file, 2);
@@ -504,6 +537,7 @@ int outputErrAppend(char* rhs) {
 		return -1;
 	}
 
+	// Redirect stdout to rhs
 	original_desc = 1;
 	new_desc = dup(original_desc);
 	ret_val = dup2(rhs_file, 1);
@@ -511,6 +545,7 @@ int outputErrAppend(char* rhs) {
 		return -1;
 	}
 
+	// Redirect stderr to rhs
 	second_original_desc = 2;
 	second_new_desc = dup(second_original_desc);
 	ret_val = dup2(rhs_file, 2);
