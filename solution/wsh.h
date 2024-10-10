@@ -205,8 +205,21 @@ int outputRedirect(char* lhs, char* rhs);
 **/
 int outputAppend(char* lhs, char* rhs);
 
+/**
+* Prints stdout and stderr to rhs file
+**/
 int outputErrRedirect(char* rhs);
 
+/**
+* Appends stdout and stderr to rhs file
+**/
 int outputErrAppend(char* rhs);
 
+/**
+* Restores all file descriptors to their original values
+**/
 void restoreFileDescs();
+
+void freeHistory();
+
+void freeShellVars();

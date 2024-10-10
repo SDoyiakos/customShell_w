@@ -96,10 +96,11 @@ int substituteShellVars(TokenArr* my_tokens) {
 	for(int i = 0;i< my_tokens->token_count;i++) {
 		if(my_tokens->tokens[i][0] == '$') { // If token is a var
 			shortened_input = &my_tokens->tokens[i][1]; // Retrieve str without the $
+			
 			// Get from env first
 			my_var = getenv(shortened_input);
 
-			// If varn not found in env
+			// If var not found in env
 			if(my_var == NULL) {
 				my_var = getShellVar(shortened_input); // Get the vars value
 			}
@@ -107,7 +108,7 @@ int substituteShellVars(TokenArr* my_tokens) {
 			free(my_tokens->tokens[i]);
 			my_tokens->tokens[i] = malloc(strlen(my_var) + 1);
 			if(my_tokens->tokens[i] == NULL) {
-				printf("Malloc error\n");
+				fprintf(stderr, "Malloc error\n");
 				return -1;
 			}
 			strcpy(my_tokens->tokens[i], my_var);
@@ -117,31 +118,30 @@ int substituteShellVars(TokenArr* my_tokens) {
 }
 
 void programLoop(FILE* input_stream) {
-	int error_flag = 0;
 	TokenArr* my_tokens;
-	char* user_input = malloc(SHELL_MAX_INPUT * sizeof(char));
-	int* input_size = malloc(sizeof(int));
+	char user_input[SHELL_MAX_INPUT];
+	int input_size;
 	char* redirect_val = NULL;
 
 	// Run loop until exit
 	while(1) {
-	if(error_flag != 0) {
-		exit_global = error_flag;
-	}
 		if(input_stream == stdin) {
 			printf("wsh> ");
 			fflush(stdout);
 		}	
-		
-		error_flag = parseInputs(user_input, input_size, input_stream);	
-		my_tokens = NULL;
+
+		// Don't want to execute further if cant parse
+		if(parseInputs(user_input, &input_size, input_stream) == -1) {
+			exit_global = -1;
+			continue;
+		}
 		
 		// Check for EOF after getting input
 		if(feof(input_stream)) {
 			wshExit();
 		}
 
-		if(*input_size != 0) {
+		if(input_size != 0) {
 			my_tokens = tokenizeString(user_input); // Tokenize input
 			if(my_tokens->tokens[0][0] != '#') {				
 				substituteShellVars(my_tokens);
@@ -154,7 +154,7 @@ void programLoop(FILE* input_stream) {
 					my_tokens->tokens[my_tokens->token_count -1] = NULL;
 					my_tokens->token_count--;
 				}
-				error_flag = runCommand(my_tokens);
+				exit_global = runCommand(my_tokens);
 				restoreFileDescs();
 			}
 			freeTokenArr(my_tokens);
@@ -313,6 +313,29 @@ void removeHistEntry() {
 	free(histTail->next_entry);
 	histTail->next_entry = NULL;
 	histSize--;
+}
+
+void freeHistory() {
+	struct HistEntry* next_entry_ptr;
+	struct HistEntry* current_entry_ptr;
+	current_entry_ptr = histHead;
+	while(current_entry_ptr != NULL) {
+		next_entry_ptr = current_entry_ptr->next_entry;
+		freeTokenArr(current_entry_ptr->entry_tokens);
+		free(current_entry_ptr);
+		current_entry_ptr = next_entry_ptr;
+	}
+}
+
+void freeShellVars() {
+	struct ShellVar* next_entry_ptr;
+	struct ShellVar* current_entry_ptr;
+	current_entry_ptr = shellLinkedListHead;
+	while(current_entry_ptr != NULL) {
+		next_entry_ptr = current_entry_ptr->next_var;
+		free(current_entry_ptr);
+		current_entry_ptr = next_entry_ptr;
+	}
 }
 
 char* getPath(TokenArr* my_tokens) {
@@ -624,6 +647,7 @@ int runCommand(TokenArr* my_tokens) {
 				return -1;
 			}
 			else {
+				freeTokenArr(my_tokens);
 				wshExit();
 			}
 			break;
@@ -653,20 +677,21 @@ int runCommand(TokenArr* my_tokens) {
 			
 		case EXPORT:
 		case LOCAL: 
-
 			// Always uses form export/local x=(y)
 			if(my_tokens->token_count != 2) {
 				fprintf(stderr, "Error, command should be of form export/local VAR=value\n");
 				return -1;
 			}
 			if(my_tokens->tokens[1][0] == '=') {
-				fprintf(stderr, "Error, can't have empy lhs in var assignment\n");
+				fprintf(stderr, "Error, can't have empty lhs in var assignment\n");
+				return -1;
 			}
 		
 			char* var_name;
 			char* var_val;
 			var_name = strtok(my_tokens->tokens[1], "="); 
 			var_val = strtok(NULL, "=");
+			
 			
 			// Check for strtok error
 			if(var_name == NULL) {
@@ -679,12 +704,53 @@ int runCommand(TokenArr* my_tokens) {
 				var_val = "";
 			}
 
+			// Putting these values into a token arr
+			TokenArr* var_toks = malloc(sizeof(TokenArr));
+			if(var_toks == NULL) {
+				fprintf(stderr, "Error, Failed to assign var\n");
+				return -1;
+			}
+			var_toks->token_count = 2;
+			var_toks->tokens = malloc(2 * sizeof(char*));
+			if(var_toks->tokens == NULL) {
+				fprintf(stderr, "Error, Failed to assign var\n");
+				return -1;
+			}
+
+			// Copy into tokenArr
+			var_toks->tokens[0] = strdup(var_name);
+			var_toks->tokens[1] = strdup(var_val);
+			if(var_toks->tokens[0] == NULL || var_toks->tokens[1] == NULL) {
+				fprintf(stderr, "Error, Failed to assign var\n");
+				free(var_toks->tokens);
+				free(var_toks);
+				return -1;
+			}
+
+			// Substituting any vars
+			if(substituteShellVars(var_toks) == -1) {
+				fprintf(stderr, "Error, Failed to assign var\n");
+				return -1;
+			}
+
+			// Reassign the tokens
+			var_name = var_toks->tokens[0];
+			var_val = var_toks->tokens[1];
+
+			// Free the data struct holding the toks but not the tokens themselves
+			free(var_toks->tokens);
+			free(var_toks);
+						
+			int ret_val;
 			if(built_in_val == LOCAL) {
-				return wshLocal(var_name, var_val);
+				ret_val = wshLocal(var_name, var_val);
 			}	
 			else {
-				return wshExport(var_name, var_val);
+				ret_val = wshExport(var_name, var_val);
 			}
+			free(var_name);
+			free(var_val);
+			return ret_val;
 			break;	
 				
 		case VARS: // vars
@@ -847,6 +913,8 @@ int wshVars() {
 }
 
 void wshExit() {
+	freeHistory();
+	freeShellVars();
 	exit(exit_global);
 }
 
